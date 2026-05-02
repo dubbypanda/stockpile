@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 _CONFIG_PATH = Path(__file__).parent.parent / "config.toml"
-_CONFIG_DIR = _CONFIG_PATH.parent
+_REPO_ROOT = Path(__file__).parents[2]
 
 
 def _load():
@@ -30,7 +30,7 @@ def get_all_accounts(brokerage_filter: str | None = None) -> list[AccountConfig]
     for entry in _cfg.get("accounts", []):
         brokerage = entry.get("brokerage", "").lower()
         csv_raw = entry.get("csv") or None
-        csv = str(_CONFIG_DIR / csv_raw) if csv_raw else None
+        csv = str(_REPO_ROOT / csv_raw) if csv_raw else None
         symbols = entry.get("symbols") or None
         if not brokerage:
             continue
@@ -40,4 +40,4 @@ def get_all_accounts(brokerage_filter: str | None = None) -> list[AccountConfig]
     return results
 
 
-OUTPUT_DIR = _CONFIG_DIR / _cfg.get("output", {}).get("dir", ".")
+OUTPUT_DIR = _REPO_ROOT / _cfg.get("output", {}).get("dir", "charts")

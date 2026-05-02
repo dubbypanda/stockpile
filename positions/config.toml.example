@@ -9,19 +9,19 @@
 [[accounts]]
 brokerage = "schwab"
 sheet_id  = "your-sheet-id-here"
-csv       = "ALL_TRANS.csv"
+csv       = "input/schwab.csv"
 
 # Multiple accounts for the same brokerage — just add another entry:
 # [[accounts]]
 # brokerage = "schwab"
 # sheet_id  = "your-ira-sheet-id-here"
-# csv       = "ALL_TRANS_IRA.csv"
+# csv       = "input/schwab_ira.csv"
 
 # Other brokerages work the same way once supported:
 # [[accounts]]
 # brokerage = "robinhood"
 # sheet_id  = "your-robinhood-sheet-id-here"
-# csv       = "ALL_TRANS_ROBINHOOD.csv"
+# csv       = "input/robinhood.csv"
 
 # Optional: override default credential file paths.
 # Defaults shown — only uncomment if you need different paths.

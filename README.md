@@ -109,11 +109,20 @@ Each sub-project has a `config.toml.example`. Copy it and fill in
 your details:
 
 ```bash
+# macOS / Linux / Git Bash
 cp cost-basis-charts/config.toml.example cost-basis-charts/config.toml
 cp positions/config.toml.example positions/config.toml
+
+# Windows PowerShell or CMD
+copy cost-basis-charts\config.toml.example cost-basis-charts\config.toml
+copy positions\config.toml.example positions\config.toml
 ```
 
 See the comments inside each file for what each field means.
+
+Place your brokerage CSV exports in `input/` — both tools look there
+by default. The `input/` directory is gitignored so your files stay
+local.
 
 ## Adding new dependencies
 

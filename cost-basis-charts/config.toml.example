@@ -10,13 +10,13 @@
 
 [[accounts]]
 brokerage = "schwab"
-csv       = "broker_transactions/schwab556.csv"
- symbols = ["PFE", "SCHW", "GOOGL"]
+csv       = "input/schwab.csv"
+symbols   = ["PFE", "SCHW", "GOOGL"]
 
 # Multiple accounts or brokerages — just add another entry:
 # [[accounts]]
 # brokerage = "robinhood"
-# csv       = "robinhood_transactions.csv"
+# csv       = "input/robinhood_transactions.csv"
 
 # Output directory for generated HTML files (default: current directory).
 [output]

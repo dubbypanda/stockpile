@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 _CONFIG_PATH = Path(__file__).parent.parent / "config.toml"
+_REPO_ROOT = Path(__file__).parents[2]
 
 
 def _load():
@@ -30,7 +31,8 @@ def get_all_accounts(brokerage_filter: str | None = None) -> list[AccountConfig]
     for entry in _cfg.get("accounts", []):
         brokerage = entry.get("brokerage", "").lower()
         sheet_id = entry.get("sheet_id", "")
-        csv = entry.get("csv") or None
+        csv_raw = entry.get("csv") or None
+        csv = str(_REPO_ROOT / csv_raw) if csv_raw else None
         if not brokerage or not sheet_id:
             continue
         if brokerage_filter and brokerage != brokerage_filter.lower():
