@@ -1,0 +1,8 @@
+# Image and design files — kept locally, not tracked in git
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.xcf
+*.psd
+*.ai
