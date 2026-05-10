@@ -565,18 +565,18 @@ def _show_scan_results(df: pd.DataFrame, mode: str, buy: bool,
 # ── Tab: Single Ticker ───────────────────────────────────────────────────────
 
 def _tab_single() -> None:
-    # ── Top: ticker + flow selector on the same row ───────────────────────────
-    # ── Row 1: ticker (narrow) + flow selector ────────────────────────────────
-    tc, fc = st.columns([1, 6])
-    with tc:
-        ticker = st.text_input("Ticker", "AAPL", key="s_ticker")
-    with fc:
-        flow = st.radio(
-            "What do you want to do?",
-            ["Find new options", "Roll an existing position"],
-            horizontal=True,
-            key="s_flow",
-        )
+    # ── Group 1: Ticker + flow ────────────────────────────────────────────────
+    with st.container(border=True):
+        tc, fc = st.columns([1, 6])
+        with tc:
+            ticker = st.text_input("Ticker", "AAPL", key="s_ticker")
+        with fc:
+            flow = st.radio(
+                "What do you want to do?",
+                ["Find new options", "Roll an existing position"],
+                horizontal=True,
+                key="s_flow",
+            )
     rolling = (flow == "Roll an existing position")
 
     # Defaults so the same scan code path handles both flows
@@ -586,54 +586,56 @@ def _tab_single() -> None:
     roll_strike    = 0.0
     roll_exp       = date.today()
 
-    # ── Row 2: action-specific controls (compact, horizontal) ─────────────────
-    if rolling:
-        rc1, rc2, rc3, _ = st.columns([1, 1, 1.2, 3])
-        with rc1:
-            roll_type_sel = st.selectbox("Position type", ["call", "put"],
-                                         key="s_roll_type")
-        with rc2:
-            roll_strike = st.number_input("Current strike", value=0.0,
-                                          min_value=0.0, step=1.0,
-                                          key="s_roll_strike")
-        with rc3:
-            roll_exp = st.date_input("Current expiration", key="s_roll_exp")
-    else:
-        a1, a2, _ = st.columns([2.2, 1.8, 2])
-        with a1:
-            action = st.radio(
-                "Direction",
-                ["Sell (find overpriced)", "Buy (find underpriced)"],
-                horizontal=True,
-                key="s_action",
-            )
-            buy = action.startswith("Buy")
-        with a2:
-            option_type = st.radio("Option Type",
-                                   ["Calls", "Puts", "Both"],
-                                   horizontal=True, key="s_opt_type")
+    # ── Group 2: Action-specific controls ─────────────────────────────────────
+    with st.container(border=True):
+        if rolling:
+            rc1, rc2, rc3, _ = st.columns([1, 1, 1.2, 3])
+            with rc1:
+                roll_type_sel = st.selectbox("Position type", ["call", "put"],
+                                             key="s_roll_type")
+            with rc2:
+                roll_strike = st.number_input("Current strike", value=0.0,
+                                              min_value=0.0, step=1.0,
+                                              key="s_roll_strike")
+            with rc3:
+                roll_exp = st.date_input("Current expiration", key="s_roll_exp")
+        else:
+            a1, a2, _ = st.columns([2.2, 1.8, 2])
+            with a1:
+                action = st.radio(
+                    "Direction",
+                    ["Sell (find overpriced)", "Buy (find underpriced)"],
+                    horizontal=True,
+                    key="s_action",
+                )
+                buy = action.startswith("Buy")
+            with a2:
+                option_type = st.radio("Option Type",
+                                       ["Calls", "Puts", "Both"],
+                                       horizontal=True, key="s_opt_type")
 
-    # ── Row 3: all filters + Scan on one row, bottom-aligned ─────────────────
-    n1, n2, n3, n4, n5, n6, _ = st.columns(
-        [1, 1, 1, 2, 1, 1.5, 2.5],
-        vertical_alignment="bottom",
-    )
-    with n1:
-        min_dte = st.number_input("Min DTE", value=365, min_value=1,
-                                  key="s_min_dte")
-    with n2:
-        max_dte_inp = st.number_input("Max DTE", value=0, min_value=0,
-                                      help="0 = no limit", key="s_max_dte")
-    with n3:
-        min_oi = st.number_input("Min OI", value=25, min_value=0,
-                                 key="s_min_oi")
-    with n4:
+    # ── Group 3: Filters ──────────────────────────────────────────────────────
+    with st.container(border=True):
+        n1, n2, n3, _ = st.columns([1, 1, 1, 3], vertical_alignment="bottom")
+        with n1:
+            min_dte = st.number_input("Min DTE", value=365, min_value=1,
+                                      key="s_min_dte")
+        with n2:
+            max_dte_inp = st.number_input("Max DTE", value=0, min_value=0,
+                                          help="0 = no limit", key="s_max_dte")
+        with n3:
+            min_oi = st.number_input("Min OI", value=25, min_value=0,
+                                     key="s_min_oi")
+
+    # ── Scan row: delta, top n, scan button ───────────────────────────────────
+    s1, s2, _, s3 = st.columns([2, 0.8, 1, 1.2], vertical_alignment="bottom")
+    with s1:
         delta_range = st.slider("Delta Range (abs value)", 0.0, 1.0,
                                 (0.10, 0.75), step=0.05, key="s_delta")
-    with n5:
+    with s2:
         top_n = st.number_input("Top N", value=10, min_value=1,
                                 max_value=50, key="s_top")
-    with n6:
+    with s3:
         scanned = st.button("Scan", type="primary",
                             use_container_width=True, key="s_scan_btn")
 
@@ -727,6 +729,7 @@ def _tab_single() -> None:
     m2.metric("Expirations", df_r["expiration"].nunique())
     ed = res["earnings_dates"]
     m3.metric("Next Earnings", ed[0].strftime("%b %d") if ed else "unknown")
+    st.divider()
 
     if rcc is not None:
         st.info(f"Rolling {res['roll_type']} ${res['roll_strike']:.0f} "
@@ -960,6 +963,17 @@ st.markdown(
     """
     <style>
     .block-container { padding-top: 1rem !important; }
+
+    [data-testid="stDivider"] {
+        margin-top: 0 !important;
+        margin-bottom: 0 !important;
+        padding-top: 0 !important;
+        padding-bottom: 0 !important;
+    }
+    [data-testid="stDivider"] hr {
+        margin-top: 0.15rem !important;
+        margin-bottom: 0.15rem !important;
+    }
 
     /* Compact metric cards — Streamlit's default value font is ~2rem, way
        too big for our header row. */

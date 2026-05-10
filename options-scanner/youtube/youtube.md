@@ -3,7 +3,11 @@
 ## Title Ideas
 
 ### keep this one
-- Option Scanner by Claude
+- Option Scanner by Claude (Python, GitHub)
+- 
+- 
+- 
+- 
 - Claude finds the best Options
 - "Use Claude to find the Best Options (Python)"
 - "Claude Code Finds Mis-Priced Options (Python)"
@@ -35,15 +39,12 @@ made with Claude Code.  I built it in a few nights.  It finds the best
 options from Yahoo Finance Option Chains and
 
 (scroll to see pre populated chart and tables)
+
 shows them to you in a chart and 2 tables.
-
-(BACK TO top — refresh page, type **ticker**)
-
-[12 Refresh so no results]
 
 Let me demonstrate:
 
-Let's say you have 100 shares of [Disney] and you're
+Let's say you have 100 shares of [Disney], and you're
 interested in making some extra income on these shares by selling a
 covered call. [hover over the controls you may need to set]
 You'd like to keep the option open for at least a year so you
@@ -53,13 +54,13 @@ It also works for shorter dated options.
 Let's do the scan and see what it finds...
 (Type a ticker. Click Scan)
 
-[13 Results]
+[12 Results]
 
 The Spot is the underlying stock's current price, shown here and on the chart
 it's the vertical line.
 
 It found 3 expirations, and you can select each one here in this dropdown.
-which will update the chart and two tables below.
+Selecting a different expiration  will update the chart and two tables below.
 The one it selects at first is the expiration with the best option
 shown in the bottom table, this one.
 
@@ -70,7 +71,7 @@ Earnings have a big effect on option volatilty when they're near.
 
 (scroll down to chart)
 
-Now lets look at the chart.
+Now lets take a good look at the chart.
 
 Each dot on this chart is a call for [Dis] at this Expiration, that
 meets our scan criteria. 
@@ -78,7 +79,7 @@ meets our scan criteria.
 The bigger green dots are the more attractive options, meaning their
 volatility is higher than what the other options suggest it should be.
 This expiration only has one attractive option, but look at this one,
-it has 4, but none as good as the other expiration.
+it has 4, but none as good as the 1 in the other expiration.
 
 The dashed line is what the option scanner says each
 strike's implied volatility *should* be —
@@ -94,14 +95,13 @@ premium for the same amount of risk. Those are the calls to consider selling.
 
 The smaller Red dots are the opposite — cheaper than they should be.
 If you're buying calls, you'd be interested in those.
-But probably not the ones you'd want to sell.
 
 (HOVER OVER A DOT — tooltip shows strike, IV+pp, delta)
 
 Hover over any dot, and you get the strike, the expiration, how many
 percentage points it sits above the surface, the delta, and the
-open interest. That's about everything you need to decide whether to sell it,
-Other than your situation and circumstances.
+open interest. Thats valuable info to help decide whether to sell it,
+also consider your situation and circumstances.
 
 [22 Like and subscribe Slide]
 We'll spend a little more time on the chart, and then go over the 2 tables.
@@ -121,7 +121,7 @@ for a given expiration.
 
 A stock's option chain should form a smooth surface. Plotting the
 implied volatility against strike, and it traces a shape — the
-volatility smile. Smooth transitions between expirations.
+volatility smile. Smooth transitions between strikes.
 Market makers like to keep it that way.
 
 The dashed line in the chart is that smooth shape, fit to the
@@ -141,26 +141,23 @@ Five or more points above the line, it could be a genuine signal.
 
 [32 SCROLL DOWN TO THE TABLES]*
 
-Below the chart are two tables.
+Lets scroll down to the 2 tables.
 
 The first is the chain view. It shows every option in the
 expiration selected in the chart dropdown above, sorted by
 strike — it's like reading an option chain from your broker with extra
 information. The rows are shaded: green means IV+pp is meaningfully above
-the average for that expiration, gray means it's price is close to its expected
+the average for that expiration, this one.  Gray means it's price is close to its expected
 price, and red means the price of the option is less than usual.
 
-[33 POINT TO ROW SHADING IN CHAIN VIEW]*
-
-You see all the strikes for the expiration at a glance,
-and the shading does the filtering for you —
+So, the shading does the filtering for you —
 you can see in seconds which strikes have rich
 premium and which ones are unremarkable.
 
-[34 POINT TO YELLOW BID/ASK CELLS]*
+[33 POINT TO YELLOW BID/ASK CELLS]*
 
-Two other signals in the table. Yellow Bid and Ask cells mean
-the spread is wider than typical for this chain — the gap
+Two other shading in the table are Yellow.  Yellow Bid and Ask cells mean
+the spread is wider than typical for this chain — spread is the gap
 between what buyers will pay and sellers will accept. A wide
 spread means your real execution price may land 
 worse than the mid-price suggests. Yellow OI or Vol means open
@@ -171,14 +168,15 @@ Hover over the column headers with yellow shaded cells, and it explains
 what the yellow color means.  You can also hover over the IV+pp column header
 for a more detailed explanation of it.
 
-[35 POINT TO SECOND TABLE — "TOP CANDIDATES — ALL CHAINS"]*
+[34 POINT TO SECOND TABLE — "TOP CANDIDATES — ALL CHAINS"]*
 
 Let's move down to the top candidates table — the highest-ranked
-options by IV+pp pulled from every expiration are shown here.
+options by IV+pp pulled from every expiration, all chains are shown here.
 The top table showed me everything for single expiration, sorted by strike.
-But this table shows me the best ten, regardless of expiration or strike.
+But this table shows me the best ten, regardless of expiration or strike
+sorted by IV+pp.
 
-[36 POINT TO DELTA COLUMN]*
+(POINT TO DELTA COLUMN)
 
 Delta is your approximate probability of being assigned at
 expiration. A delta of 0.30 means roughly a thirty percent
@@ -188,15 +186,18 @@ you give up some premium, but there's less chance the stock will
 rise above your strike, and you won't lose out on as much
 underlying stock appreciation if it gets called away.
 
-[37 POINT TO ANN% COLUMN]*
+[35 POINT TO ANN% COLUMN]*
 
 Ann% is the annualized yield on the premium you'd collect —
 for calls, relative to the stock's current price.  It's a good
 measure of how much income you'd make by selling the call,
-and should move the opposite direction of delta.
+and should usually move in the same direction as delta,
+more risk of losing out on underlying gains, means more income.
 
 For puts, Annualized percent is relative to the strike, which is the capital
-you'd be putting at risk. This metric lets you compare options across
+you'd be putting at risk. 
+
+Annual percent lets you compare options across
 different expirations on the same income footing.
 
 ---
@@ -245,28 +246,34 @@ got that distinction, then you'll have a better understanding of the tool.
 
 Let's see what other filters we have to play with...
 
-If you have an option expiring in a few days or months and want to roll it,
-check the "Rolling an existing position?" radio.
+If you have an existing option you'd like to roll,
+check the "Roll an existing" radio.
 
 (CHECK THE ROLL BOX — FIELDS APPEAR)
 
-Fields appear for your current strike and expiration. Fill them
-in, scan, and a Net Credit column appears in the table — the
-net credit you'd receive after paying to close the old position.
+Fields appear for your current strike and expiration.
+I currently have a Dec 140 Disney call.
+
+Let's fill that in.  You have to be accurate with your strike and expiration
+if you want accurate Net credit/debit values.
+
+So lets scan, and a Net Credit column appears in the table — the
+net credit you'd receive after paying to close the old position
+and selling the new position.
 Positive means you'd collect cash on the roll. Negative is a
 debit.
 
-[51 Direction]
+[51 Dir Type MinMax]
 (Switch back to Find new options)
 
-Flip the Direction radio from Sell to Buy. Same
-surface fit, but now the ranking inverts — you're looking for
+Flip the Direction radio from Sell to Buy. 
+Several things invert — you're looking for
 the most underpriced options, the dots farthest *below* the
 curve. In buy mode the color scale flips — green now means
 cheap relative to the surface, so the green dots below the
 curve are the candidates.
 
-[52 Option Type, DTE]
+(Option Type, DTE)
 
 You can view calls, puts, or both with the Option Type radio button.
 
@@ -274,32 +281,21 @@ You can view calls, puts, or both with the Option Type radio button.
 
 Min and Max DTE lets you change the range for Days to Expiration.
 Leaving Max DTE as 0 will not set a max DTE.
+And you can set Min Open Interest (IO) if you want to make sure
+  there is some threshold on Open Interest.
 
-[53 DELTA SLIDER]
+[52 DELTA Top N]
 
 Here's the delta range slider. Default is 0.10 to 0.75 —
 a wide range that covers everything from conservative out-of-the-
 money strikes to some in-the-money ones. Set this to your preference.
 
-(DRAG SLIDER TO 0.25–0.40, CLICK SCAN)
+(DRAG SLIDER)
 
-You could narrow it to 0.25 to 0.40 — enough premium to be
-worthwhile, enough strike distance to not get called away every
-time the stock moves.  But you'll see fewer strikes and options
-on the chart and in the tables.
-with all with delta confined in that tighter range.
+(53 Top N, Scan and Dropdown)
 
-[54 Top N, Scan and Dropdown]
-
-The Top N value lets you control how many candidates you want to see
-in the bottom Top Candidate table accross all expirations.
-
-
-(Scan and Dropdown)
-
-Again, after Scanning, you can use this dropdown to switch between the
-available expirations, and view their chart and tables.
-The number of Top N picks for each Expriation is in parenthesis
+And the Top N value lets you control how many candidates you want to see
+in the bottom Top Candidate table across all expirations.
 
 ---
 
@@ -307,7 +303,7 @@ The number of Top N picks for each Expriation is in parenthesis
 
 [60 PORTFOLIO TAB]
 
-Here's a nice feature that could save you some time: the Portfolio Tab
+The portfolio tab is nice feature that could save you some time
 You can upload your entire brokerage transaction log, CSV format  —
 it supports Schwab, Robinhood, Fidelity, or Merrill,
    but you have to tell it which format.
@@ -315,8 +311,10 @@ it supports Schwab, Robinhood, Fidelity, or Merrill,
 (Scan Schwab 556)
 The tool detects every open position in the log, and scans each for good options.
 
-This isn't actually uploading your transaction log anywhere,
+This DOES NOT actually upload your transaction log anywhere,
 It all stays local.
+
+I'll do one of my schwab logs to demonstrate.
 
 ---
 
@@ -324,30 +322,27 @@ It all stays local.
 
 [70 Setup 1-2 slide]
 
-Now Let's summarize how to run this yourself.
+Now how would you run this yourself.
 This is all explained in detail in the Option Scanner Readme.
-
 
 **Step 1 Get Code from Github
 
 Go to the GitHub repository linked in the description.
 Either download the zip or clone it.
+Make sure you're in the Stockpile repo.
 
 ```
 git clone https://github.com/medloh/stockpile.git
 cd stockpile
 ```
 
-You'll need Git installed if you want to clone — git-scm.com has installers for
-Windows and Mac.  Or you can just download it.
+You'll need Git installed if you want to clone it
 
 
 **Step 2 — Install Python.**
 
 You'll need Python 3.12 or newer. Go to python.org, download
-the installer for your platform. On Windows, check the box that
-says "Add Python to PATH" during installation — that's the one
-people miss.
+and run the installer for your platform. 
 
 
 [71 Setup 3-4 Slide]
@@ -370,23 +365,19 @@ On Windows, open PowerShell and run:
 powershell -ExecutionPolicy Bypass -c "irm https://astral.sh/uv/install.ps1 | iex"
 ```
 
-If you really don't want to install uv, you can use plain pip
-instead — but uv is much faster and handles the workspace
-structure this project uses.
-
 [Get Deps]
 *[SHOW TERMINAL — RUN uv sync]*
 
-**Step 4 — Install dependencies.**
+**Step 4 — Let UV get all the dependencies.**
 
-From the stockpile folder:
+From the stockpile directory, run this command:
 
 ```
 uv sync
 ```
 
-This installs everything — yfinance, numpy, streamlit, tabulate,
-all of it. Takes about thirty seconds the first time.
+This installs everything — yfinance, streamlit, etc,
+Takes about thirty seconds the first time.
 
 
 [72 Run it]
@@ -401,14 +392,15 @@ uv run streamlit run options-scanner/run_app.py
 ```
 
 That opens the app in your browser at localhost:8501. From here
-on, you don't need the terminal — type a ticker, hit Scan.
+on, you don't need the terminal — 
+just type in a ticker, hit Scan, and have fun.
 
-
-The README in the options-scanner folder has the full setup instructions.
+Again, The README in the options-scanner folder has the full setup instructions.
 Everything in this video is documented there.
 
-**One important thing.**  If you use the portfolio scanner, it stays on
-your machine. It never leaves and Anthropic server sees it.
+**One important thing.**  If you use the portfolio scanner, everything
+stays on your machine. It never leaves and Anthropic server sees it.
+the only exception is it reaches out to Yahoo Finance to get quotes.
 
 -----
 
@@ -451,21 +443,23 @@ I tested it,  reviewed, came up with new ideas, asked for changes.
 A couple more days of polish and here it is.
 Claude also helped tremendously with the YouTube script.
 
-[82 SHOW GIT LOG OR FILE DIFF]*
+[82 continued.]*
 
-The result: just under 2000 lines of Python across
+Guess who made this slide, it wasn't me.
+
+The result is just under 2000 lines of Python across
 ten source files. Option Chain fetching, IV surface fitting, earnings
 detection, HTML report generation, portfolio parsing, and the Streamlit app.
 
-95% written part-time in a couple evenings, Two nights.
+95% written part-time in a couple nights.
 Then some polish this weekend while working on this YouTube episode.
 
 [83 Before After Claude Slide]
 
-I'm going to make a claim here that I can't prove precisely,
+I'm going to make a claim here that I can't prove,
 but I believe is in the right ballpark: this took roughly
-one 20th the effort it would have taken me BC - before Claude.
-If I even considered it before, I would have quickly given up.
+one 20th the effort it would have taken BC - before Claude.
+If I even considered it before, I would have probably given up.
 
 Think about what "before Claude" looks like for a project
 like this. You'd spend an evening just researching the right
@@ -555,7 +549,7 @@ Let me know how you're using it, or how I could make it better.
 
 (configure last two episodes to show)
 Take a look at my previous two episodes about other tools
-in this repo, showing up now.
+in this repo, they should have popped up a few seconds ago.
 
 ---
 
@@ -563,37 +557,45 @@ in this repo, showing up now.
 
 ## DESCRIPTION
 
-Options Scanner made by Claude — Find mis-priced Options
-to Sell.
+Option Scanner by Claude (Python, GitHub)
 
-This is an open-source option chain scanner I made with Claude Code.
-It's a free web app that runs on your laptop, 
-and that ranks every call or put by how
-overpriced it is relative to a fitted volatility surface, and
-shows the result on a chart so you can see the rich strikes at
-a glance. Useful for selling covered calls, cash-secured puts,
-and rolling existing positions, and buying options.
+Open-source Python Option Scanner with Claude Code on GitHub.
+It helps you find the best options to sell or buy — covered calls,
+cash-secured puts, rolls, and more. It runs as a web app on your
+own laptop, pulls option chains from Yahoo Finance, and ranks
+every option by how overpriced or underpriced it is relative to
+a fitted volatility surface.
+
+#options #coveredcalls #python #claudecode #optionstrading
+#github #leaps #stockmarket #investing #cashsecuredputs
+
+Green dots on the chart mean rich premium worth selling;
+red dots mean cheap premium worth buying. The tables
+below let you pick your strike with row shading that matches the
+chart colors.
 
 **What it does:**
-- Browser-based UI — no terminal required to use it
-- Volatility-surface chart: every option as a dot, fitted curve
-  overlaid, green dots = attractive, red dots = unattractive
-- Fetches the full option chain from Yahoo Finance (free,
-  no API key)
-- Fits a 2-D volatility surface to find options priced above
-  where they should be
-- Ranks by IV excess — the gap between actual and expected
-  implied volatility
-- Per-expiration chain view sorted by strike: row shading
-  shows which strikes are rich, average, or weak at a glance
-- Flags wide bid-ask spreads and low open interest with yellow
-  cell highlights so you spot execution risk before acting
-- Earnings dates shown in chain title with days-to-go count
-- Filters by delta (default 0.10–0.75), open interest, DTE
-- Roll mode: shows net credit for rolling an existing position
-- Portfolio scan: drag-and-drop your brokerage CSV and scan
-  every open position automatically
-- CLI also available for scripting and automation
+- Volatility-surface chart — every option as a dot, green =
+  attractive, red = unattractive, sized by IV excess
+- Per-expiration chain view sorted by strike with IV+pp row
+  shading — see the whole chain at a glance
+- Top candidates table ranked across all expirations
+- Yellow cell highlights flag wide spreads, low OI, and low
+  volume so you spot execution risk before acting
+- Earnings date shown in the chain title with days-to-go count
+- Roll mode — enter your current position, see net credit for
+  every roll candidate
+- Portfolio scan — drag in your brokerage CSV (Schwab,
+  Robinhood, Fidelity, or Merrill) and scan every open position
+- Buy mode — flips the ranking to find underpriced options
+- Filters: delta range, min OI, min/max DTE
+- HTML report download for sharing or saving
+
+**Data source:** Yahoo Finance — free, no account or API key
+needed. IV can be stale on thinly traded strikes, and Greeks
+are computed from Black-Scholes. Treat the output as a starting
+point for research, not a trading signal on its own. Always
+verify on your broker before acting.
 
 **What you need:**
 - Python 3.12+
@@ -601,30 +603,30 @@ and rolling existing positions, and buying options.
 - The repo (free on GitHub, link below)
 - Optional: a brokerage CSV export for the portfolio scan
 
-**Steps covered:**
-0:00 Hook — scanning NVDA in the web app
-1:15 How the volatility surface chart works
-2:30 Why pp, not % — a wonky but important detail
-3:15 Selling covered calls — the main use case
-5:15 More features: puts, rolling, buy mode, short-dated
-7:15 Portfolio scan — drag in your brokerage CSV
-9:00 How I built it — 22 prompts, 2 evenings, ~1900 lines
-10:30 Setup — Python, uv, cloning the repo, running it
-
 **Links:**
 GitHub repo: https://github.com/medloh/stockpile
 Claude Code: https://claude.ai/code
-Previous episode (cost basis charts): [link]
-Previous episode (Google Sheets tracker): [link]
+Previous episode (Google Sheets tracker): https://youtu.be/9uf3cyOWPBQ?si=7zstAoL_S4fxIMKm
+Previous episode (cost basis charts): https://youtu.be/LqroeMNC7AU?si=sV7y2-UHcXdLc_YI
 
-Your brokerage data stays on your machine. This tool only
-calls Yahoo Finance's public API — no accounts, no keys, no
-data leaves your computer.
+Your brokerage CSV is processed locally and never leaves your
+machine. This tool only calls Yahoo Finance's public API —
+no accounts, no keys, no data sent anywhere.
 
-If you hit a snag, drop a comment — I check them.
+Not financial advice. Options trading involves substantial risk.
+Do your own research.
 
-#options #coveredcalls #python #claudecode #optionstrading
-#thetagang #leaps #stockmarket #investing #cashsecuredputs
+If you hit a snag setting it up, drop a comment — I check them.
+
+**Tags (486 chars):**
+options scanner, covered calls, claude code, python, options
+trading, leaps options, implied volatility, cash secured puts,
+theta gang, option chain, stock options, streamlit, github,
+options strategy, call options, put options, volatility surface,
+claude ai, open source, options income, rolling options,
+portfolio scanner, yahoo finance, anthropic, leaps, ai coding,
+covered call strategy, stock market, free tool, thetagang,
+options screener, black scholes, finance python, investing
 
 ---
 
@@ -693,5 +695,44 @@ Add to exit screen of:
 - Google Sheets tracker episode
 
 ---
+
+## STARTER COMMENTS
+
+Post one of these pinned or as an early comment to seed the
+conversation.
+
+**On the tool itself:**
+> What ticker did you scan first? Drop it in the comments —
+> curious what IV+pp signals look like across different names
+> right now.
+
+**On the data source:**
+> Quick question for anyone who's used this: have you noticed
+> Yahoo Finance IV being stale on any specific tickers or
+> strikes? Trying to build a list of where the data is most
+> reliable vs. where to double-check on your broker.
+
+**On features / what's next:**
+> What would make this more useful for you? I'm weighing a
+> real-time data source (Schwab developer API), earnings
+> overlay on the chart, and a few other things. What's your
+> priority?
+
+**On the Claude Code angle:**
+> I'm genuinely curious — for those of you who code: does the
+> "1/20th the effort" claim match your experience with Claude
+> Code or similar tools? What's the most useful thing you've
+> built with it?
+
+**On setup / getting started:**
+> If you run into any issues getting it set up, post here and
+> I'll help. Windows, Mac, and Linux should all work — the
+> most common snag is the Python PATH setting on Windows during
+> install.
+
+**On options strategy:**
+> What delta range do you usually target for covered calls?
+> I've been using 0.25–0.40 as a default but curious if others
+> have a different sweet spot depending on their outlook.
 
 
