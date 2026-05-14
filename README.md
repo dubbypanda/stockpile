@@ -223,3 +223,12 @@ PowerShell**:
 2. Navigate to the repo: `cd path\to\stockpile`
 3. Run normally: `uv run cost-basis-charts/run_charts.py`
 
+## License
+
+This project is free for personal, non-commercial use under the
+[Creative Commons Attribution-NonCommercial 4.0 International
+(CC BY-NC 4.0)](https://creativecommons.org/licenses/by-nc/4.0/)
+license. Commercial use is not permitted without a separate agreement.
+If you're interested in licensing this for commercial purposes, reach
+out to driekhof@gmail.com.
+

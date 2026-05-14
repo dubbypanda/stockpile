@@ -437,3 +437,12 @@ risk of loss and is not appropriate for all investors. Do your own
 research before acting on anything this tool surfaces. The authors
 are not responsible for any trading losses or other damages arising
 from use of this software.
+
+## License
+
+This project is free for personal, non-commercial use under the
+[Creative Commons Attribution-NonCommercial 4.0 International
+(CC BY-NC 4.0)](https://creativecommons.org/licenses/by-nc/4.0/)
+license. Commercial use is not permitted without a separate agreement.
+If you're interested in licensing this for commercial purposes, reach
+out to driekhof@gmail.com.
