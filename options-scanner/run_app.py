@@ -960,6 +960,16 @@ def _tab_portfolio() -> None:
         port_top = st.number_input("Top N per ticker", value=5, min_value=1,
                                    key="p_top")
 
+    # Invalidate stored results when the file or format changes so stale
+    # data from a previous scan never bleeds through.
+    _cache_key = (
+        f"{uploaded.name}:{len(uploaded.getvalue())}" if uploaded else None,
+        brokerage,
+    )
+    if st.session_state.get("_portfolio_cache_key") != _cache_key:
+        st.session_state.pop("portfolio_results", None)
+        st.session_state["_portfolio_cache_key"] = _cache_key
+
     # ── Validation (auto-runs whenever a file and format are both set) ──────────
     scan_ready = False
     if uploaded is not None and brokerage is not None:
@@ -983,89 +993,97 @@ def _tab_portfolio() -> None:
                     "SPLIT, TRANSFER_IN)."
                 )
 
-    if not st.button("Scan Portfolio", type="primary",
-                     disabled=(uploaded is None or brokerage is None
-                               or not scan_ready)):
-        return
+    if st.button("Scan Portfolio", type="primary",
+                 disabled=(uploaded is None or brokerage is None
+                           or not scan_ready)):
+        from portfolio import get_portfolio
+        _provider = st.session_state.get("data_source", "yahoo")
+        _scfg = st.session_state.get("schwab_config")
 
-    from portfolio import get_portfolio
-    _provider = st.session_state.get("data_source", "yahoo")
-    _scfg = st.session_state.get("schwab_config")
+        with tempfile.NamedTemporaryFile(suffix=".csv", delete=False) as f:
+            f.write(uploaded.getvalue())
+            tmp_path = f.name
 
-    # Write upload to a temp file so the parser can read it
-    with tempfile.NamedTemporaryFile(suffix=".csv", delete=False) as f:
-        f.write(uploaded.getvalue())
-        tmp_path = f.name
+        try:
+            positions = get_portfolio(tmp_path, brokerage)
+        except Exception as exc:
+            st.error(f"Could not parse CSV: {exc}")
+            os.unlink(tmp_path)
+            st.stop()
 
-    try:
-        positions = get_portfolio(tmp_path, brokerage)
-    except Exception as exc:
-        st.error(f"Could not parse CSV: {exc}")
         os.unlink(tmp_path)
-        return
 
-    os.unlink(tmp_path)
+        if not positions:
+            st.warning("No open stock positions found in this CSV.")
+            st.stop()
 
-    if not positions:
-        st.warning("No open stock positions found in this CSV.")
-        return
+        st.success(f"Found {len(positions)} position(s): "
+                   f"{', '.join(p['ticker'] for p in positions)}")
 
-    st.success(f"Found {len(positions)} position(s): "
-               f"{', '.join(p['ticker'] for p in positions)}")
+        progress = st.progress(0, text="Scanning…")
+        results = []
+        for i, pos in enumerate(positions):
+            ticker = pos["ticker"]
+            progress.progress((i + 1) / len(positions),
+                              text=f"Scanning {ticker} ({i+1}/{len(positions)})…")
 
-    progress = st.progress(0, text="Scanning…")
-    results = []
-    for i, pos in enumerate(positions):
-        ticker = pos["ticker"]
-        progress.progress((i + 1) / len(positions),
-                          text=f"Scanning {ticker} ({i+1}/{len(positions)})…")
+            df, earnings_dates, err = _fetch_position(
+                ticker, int(port_min_dte), _provider, _scfg
+            )
 
-        df, earnings_dates, err = _fetch_position(
-            ticker, int(port_min_dte), _provider, _scfg
-        )
-
-        # Look up roll close costs for open calls
-        roll_close_costs = {}
-        _schwab_client = None
-        if _provider == "schwab" and pos["open_calls"]:
-            from stocks_shared.schwab_live import get_client
-            try:
-                _schwab_client = get_client(
-                    _scfg["app_key"], _scfg["app_secret"],
-                    _scfg["callback_url"], _scfg["token_file"],
-                )
-            except (ValueError, TypeError):
-                pass
-
-        for opt in pos["open_calls"]:
-            m, d, y = opt["expiration"].split("/")
-            exp_yf = f"{y}-{m}-{d}"
-            if _provider == "schwab" and _schwab_client is not None:
-                from stocks_shared.schwab_live import fetch_option_chain_schwab
-                chain = fetch_option_chain_schwab(_schwab_client, ticker, exp_yf)
-            else:
-                from stocks_shared.yahoo import fetch_option_chain
-                chain = fetch_option_chain(ticker, exp_yf)
-            if chain is not None:
-                row = chain.calls[chain.calls["strike"] == float(opt["strike"])]
-                if not row.empty:
-                    bid  = float(row["bid"].iloc[0] or 0)
-                    ask  = float(row["ask"].iloc[0] or 0)
-                    last = float(row["lastPrice"].iloc[0] or 0)
-                    roll_close_costs[opt["symbol"]] = (
-                        (bid + ask) / 2 if bid > 0 and ask > 0 else last
+            roll_close_costs = {}
+            _schwab_client = None
+            if _provider == "schwab" and pos["open_calls"]:
+                from stocks_shared.schwab_live import get_client
+                try:
+                    _schwab_client = get_client(
+                        _scfg["app_key"], _scfg["app_secret"],
+                        _scfg["callback_url"], _scfg["token_file"],
                     )
+                except (ValueError, TypeError):
+                    pass
 
-        results.append({
-            "position": pos,
-            "error": err,
-            "df": df,
-            "spot": float(df["spot"].iloc[0]) if not df.empty else None,
-            "earnings_dates": earnings_dates,
-            "roll_close_costs": roll_close_costs,
-        })
+            for opt in pos["open_calls"]:
+                m, d, y = opt["expiration"].split("/")
+                exp_yf = f"{y}-{m}-{d}"
+                if _provider == "schwab" and _schwab_client is not None:
+                    from stocks_shared.schwab_live import fetch_option_chain_schwab
+                    chain = fetch_option_chain_schwab(_schwab_client, ticker, exp_yf)
+                else:
+                    from stocks_shared.yahoo import fetch_option_chain
+                    chain = fetch_option_chain(ticker, exp_yf)
+                if chain is not None:
+                    row = chain.calls[chain.calls["strike"] == float(opt["strike"])]
+                    if not row.empty:
+                        bid  = float(row["bid"].iloc[0] or 0)
+                        ask  = float(row["ask"].iloc[0] or 0)
+                        last = float(row["lastPrice"].iloc[0] or 0)
+                        roll_close_costs[opt["symbol"]] = (
+                            (bid + ask) / 2 if bid > 0 and ask > 0 else last
+                        )
 
-    progress.empty()
+            results.append({
+                "position": pos,
+                "error": err,
+                "df": df,
+                "spot": float(df["spot"].iloc[0]) if not df.empty else None,
+                "earnings_dates": earnings_dates,
+                "roll_close_costs": roll_close_costs,
+            })
+
+        progress.empty()
+        st.session_state["portfolio_results"] = {
+            "results": results,
+            "uploaded_name": uploaded.name,
+        }
+
+    # ── Render stored results (survives widget interactions / re-runs) ───────────
+    stored = st.session_state.get("portfolio_results")
+    if stored is None:
+        return
+
+    results       = stored["results"]
+    uploaded_name = stored["uploaded_name"]
 
     for res in results:
         pos    = res["position"]
@@ -1119,7 +1137,7 @@ def _tab_portfolio() -> None:
     # Portfolio HTML download
     from report import render_portfolio_html
     port_html = render_portfolio_html(
-        results, uploaded.name, int(port_min_oi), int(port_top)
+        results, uploaded_name, int(port_min_oi), int(port_top)
     )
     st.download_button(
         "⬇ Download Portfolio Report",

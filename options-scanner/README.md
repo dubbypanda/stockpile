@@ -13,6 +13,10 @@ Three entry points:
 - **Portfolio scanner** — reads a brokerage CSV and scans every open
   position.
 
+Data is sourced from **Yahoo Finance** (default, no setup) or the
+**Schwab developer API** (real-time quotes and actual Greeks). See
+[SCHWAB_DATA_SOURCE.md](SCHWAB_DATA_SOURCE.md) to enable Schwab.
+
 For repo-wide setup (`uv sync`, etc.) see the
 [root README](../README.md#setup).
 
