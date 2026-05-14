@@ -8,6 +8,18 @@ The options scanner supports two data sources:
 - **Schwab** — real-time quotes, actual Greeks, full chain coverage;
   requires a Schwab account and a free Schwab developer API account
 
+## Schwab referral program
+
+https://www.schwab.com/refer-a-friend
+
+Here's my referral code:
+https://www.schwab.com/client-referral?refrid=REFERMJRE3UMB
+
+If you don't have a Schwab brokerage account yet, you may be able to
+earn a cash bonus by opening one through a referral link from an
+existing Schwab customer.  Sadly I won't get anything for referring
+you, but you may.  It depends on the amount you fund and type of account.
+
 ## How to configure Schwab
 
 ### 1. Get API credentials
