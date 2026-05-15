@@ -225,6 +225,52 @@ PowerShell**:
 2. Navigate to the repo: `cd path\to\stockpile`
 3. Run normally: `uv run cost-basis-charts/run_charts.py`
 
+## Contributing
+
+Contributions are welcome. Since this is a public repo, anyone can
+fork it and open a pull request — no special permissions needed on
+your end.
+
+### The fork → PR workflow
+
+1. **Fork the repo** on GitHub (top-right "Fork" button). This creates
+   your own copy under your GitHub account.
+
+2. **Clone your fork** and create a branch for your changes:
+   ```bash
+   git clone https://github.com/<your-username>/stockpile.git
+   cd stockpile
+   git checkout -b my-feature
+   ```
+
+3. **Make your changes**, then push the branch to your fork:
+   ```bash
+   git add <files>
+   git commit -m "describe your change"
+   git push origin my-feature
+   ```
+
+4. **Open a Pull Request** on GitHub. Navigate to your fork and click
+   **Contribute → Open pull request**. Set the base repository to
+   `medloh/stockpile` and base branch to `main`.
+
+5. **Review and merge** — the repo owner reviews the diff, leaves
+   any comments, and merges when ready.
+
+### Tips
+
+- Keep PRs focused on one change — easier to review and less likely
+  to conflict with other work.
+- If your branch falls behind `main`, rebase before opening the PR:
+  ```bash
+  git fetch upstream
+  git rebase upstream/main
+  ```
+  (Add the upstream remote once with
+  `git remote add upstream https://github.com/medloh/stockpile.git`)
+- PRs that touch `shared/` affect all sub-projects — mention that in
+  your PR description so it gets extra scrutiny.
+
 ## License
 
 This project is free for personal, non-commercial use under the
