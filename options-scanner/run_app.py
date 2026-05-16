@@ -1953,21 +1953,86 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-# App title overlaid on Streamlit's top header bar. Title sits to the
-# right of the sidebar toggle, aligned with the left edge of the form
-# content (matches .block-container's left padding in `layout=wide`).
-# Sized larger so its vertical footprint matches the chunky toggle pill.
-st.markdown(
-    """
-    <div style='position:fixed; top:5px; left:5rem; height:2.875rem;
-                display:flex; align-items:center;
-                font-size:1.35rem; font-weight:600; z-index:999990;
-                pointer-events:none;'>
-      📈 Options Scanner
-    </div>
-    """,
-    unsafe_allow_html=True,
-)
+# App logo overlaid on Streamlit's top header bar. Sits to the right of the
+# sidebar toggle, aligned with the left edge of the form content (matches
+# .block-container's left padding in `layout=wide`). The image is read once
+# at startup and embedded as a base64 data URI so we don't depend on
+# Streamlit's static-file serving and the page works regardless of cwd.
+import base64
+_LOGO_PATH = Path(__file__).parent / "assets" / "smallLogo1.png"
+try:
+    _LOGO_B64 = base64.b64encode(_LOGO_PATH.read_bytes()).decode("ascii")
+    _LOGO_DATA_URI = f"data:image/png;base64,{_LOGO_B64}"
+except OSError:
+    _LOGO_DATA_URI = ""
+if _LOGO_DATA_URI:
+    st.markdown(
+        f"""
+        <style>
+        /* Default position: sidebar collapsed, logo sits just to the right
+           of the >> expand button. */
+        .app-logo-overlay {{
+            position: fixed;
+            top: 9px;
+            left: 5rem;
+            height: 2.875rem;
+            display: flex;
+            align-items: center;
+            z-index: 999991;
+            pointer-events: none;
+            transition: left 0.2s ease;
+        }}
+        /* When the JS observer below detects the sidebar is open (width
+           above the collapsed threshold), it sets data-sidebar-open="true"
+           on body and this rule fires. CSS-only selectors against
+           Streamlit's DOM proved unreliable — multiple stSidebarCollapseButton
+           elements coexist in different states. Width is the only signal
+           that tracks the actual visible sidebar. */
+        body[data-sidebar-open="true"] .app-logo-overlay {{
+            left: 20rem;
+        }}
+        </style>
+        <div class='app-logo-overlay'>
+          <img src='{_LOGO_DATA_URI}' alt='Stockpile Option Scanner'
+               style='height:2.5rem; width:auto;' />
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    # Sidebar-state observer: watches the actual sidebar element's rendered
+    # width and writes data-sidebar-open onto body so the CSS above can
+    # respond. Lives in a 0×0 components.v1.html iframe (which can access
+    # the parent document because it's served from the same origin as
+    # the Streamlit app). Reaching window.parent.document is the standard
+    # pattern for Streamlit DOM hooks.
+    import streamlit.components.v1 as _components
+    _components.html(
+        """
+        <script>
+        (function() {
+            const doc = window.parent.document;
+            const sync = () => {
+                const sb = doc.querySelector('[data-testid="stSidebar"]');
+                if (!sb) return;
+                const w = sb.getBoundingClientRect().width;
+                doc.body.dataset.sidebarOpen = w > 60 ? 'true' : 'false';
+            };
+            sync();
+            const obs = new MutationObserver(sync);
+            obs.observe(doc.body, {
+                childList: true, subtree: true,
+                attributes: true,
+                attributeFilter: ['style', 'class', 'aria-expanded'],
+            });
+            // Also resync on viewport resize, since the sidebar's width
+            // tracks viewport size when open.
+            window.addEventListener('resize', sync);
+        })();
+        </script>
+        """,
+        height=0, width=0,
+    )
 
 # Load config once at startup (reads options-scanner/config.toml if present)
 from config import load_config, get_provider, get_schwab_config as _get_schwab_cfg

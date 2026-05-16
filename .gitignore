@@ -40,6 +40,9 @@ output/
 *.xcf
 *.gif
 *.svg
+# Per-app branding/static assets get tracked (overrides the blanket *.png etc.)
+!options-scanner/assets/
+!options-scanner/assets/**
 
 # OS
 .DS_Store
