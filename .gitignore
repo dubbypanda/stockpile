@@ -50,3 +50,6 @@ Thumbs.db
 
 # Private notes
 PRIVATE_NOTES.md
+
+# YouTube scripts and slide assets (kept local, not in repo)
+options-scanner/youtube/
