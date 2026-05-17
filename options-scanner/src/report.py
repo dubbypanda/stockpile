@@ -172,9 +172,9 @@ def _guide_html(buy: bool) -> str:
         return """
 <dl class="guide">
   <dt>IV+pp</dt>
-  <dd>Negative = option cheaper than the fitted surface predicts.
-  More negative = better deal. Under &minus;3pp: meaningful.
-  Under &minus;5pp: strong signal.</dd>
+  <dd>Negative = option's IV sits below the fitted surface (IV-cheap
+  relative to neighbors). Under &minus;3pp: meaningful ranking
+  signal. Under &minus;5pp: strong.</dd>
   <dt>Delta</dt>
   <dd>Probability the option expires in the money (profitable).
   Higher delta = more likely to profit, but costs more.</dd>
@@ -186,7 +186,8 @@ def _guide_html(buy: bool) -> str:
 <dl class="guide">
   <dt>IV+pp</dt>
   <dd>How many percentage points above the fitted surface. Higher =
-  more overpriced. Under 3pp: no anomaly. Over 5pp: genuine signal.</dd>
+  IV-rich relative to neighbors. Under 3pp: chain's IV is roughly
+  uniform, no strike stands out. Over 5pp: stronger signal.</dd>
   <dt>Delta</dt>
   <dd>~Probability of expiring ITM (assignment). Lower = safer,
   less premium.</dd>

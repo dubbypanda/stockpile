@@ -1,10 +1,16 @@
 # options-scanner
 
-Scans an option chain to find overpriced options worth selling:
-covered calls, cash-secured puts, and roll candidates.
-Ranked by how much each option's implied volatility sits above a
-fitted volatility surface — the higher the excess, the richer the
-premium relative to the rest of the chain.
+Scans an option chain and ranks each option by how far its implied
+volatility sits above or below a fitted volatility surface. Use it
+to surface IV-rich candidates for covered calls, cash-secured puts,
+and roll setups — or, in buy mode, IV-cheap candidates.
+
+The ranking is a **screening heuristic, not a mispricing or
+arbitrage claim**: vol smiles and skew are real, no-arbitrage
+doesn't force the surface to be smooth, and a strike sitting above
+the fit can reflect demand pressure, event-specific risk, or stale
+data just as easily as a genuine signal. Treat the output as a
+starting point for further analysis on your broker.
 
 Three entry points:
 
@@ -172,7 +178,7 @@ SPX!       use exactly "SPX" — fetches the stock, not the index
 | Flag | Default | Meaning |
 |------|---------|---------|
 | `--calls` / `--puts` | both | Show only calls or only puts |
-| `--buy` | off | Buy mode: rank by lowest IV (underpriced) |
+| `--buy` | off | Buy mode: rank by IV vs. surface, lowest first (IV-cheap relative to neighbors) |
 | `--min-dte` | 365 | Minimum days to expiration |
 | `--max-dte` | none | Maximum days to expiration |
 | `--min-oi` | 25 | Minimum open interest |
@@ -197,8 +203,8 @@ The file is written to `options-scanner/output/` by default, named
 `{TICKER}_{type}_{action}_{date}.html` (e.g.
 `AMD_call_sell_20260505.html`). Open it in any browser — columns are
 sortable by clicking the headers, and the IV+pp column is
-color-coded (green = attractive / overpriced to sell; red =
-unattractive / underpriced to buy).
+color-coded (green = IV-rich, a candidate to consider selling;
+red = IV-cheap, a candidate to consider buying).
 
 Override the directory with `--output-dir path/to/dir`.
 
@@ -235,16 +241,20 @@ $530    Jun 17 '27      408  $48.75  $52.30  $50.52  65.2   +1.0   0.44  12.7  2
 $520    Jun 17 '27      408  $50.45  $54.45  $52.45  65.3   +1.0   0.45  13.2   474
 ```
 
-### Is there a genuine anomaly?
+### Is there a genuine IV outlier?
 
 Look at the `IV+pp` column first. If the top value is under ~3pp, the
-chain is uniformly priced and the ranking is mostly noise — there is
-no standout overpriced option. In the AMD example above, the max is
-+1.6pp, which is small. All these options are priced fairly relative
-to each other; AMD's volatility surface is smooth right now.
+chain's IV is roughly uniform and the ranking is mostly noise — no
+strike stands out from the surface. In the AMD example above, the
+max is +1.6pp, which is small. All these options sit close to the
+fitted surface; AMD's volatility surface is smooth right now.
 
-When you see IV+pp of 5pp or more on a specific strike, that option
-is genuinely expensive versus its neighbors — a meaningful signal.
+When you see IV+pp of 5pp or more on a specific strike, that option's
+IV is meaningfully higher than its neighbors — a stronger ranking
+signal worth investigating. That doesn't mean it's mispriced in any
+tradeable sense (it could reflect demand pressure, skew, event risk,
+or a stale print); it means it's the kind of strike worth a closer
+look on your broker.
 
 ### Picking a strike
 
@@ -270,8 +280,8 @@ premium against assignment risk. Use `--delta-min 0.25 --delta-max
 `1E` next to an expiration means one earnings event falls before that
 date. Elevated IV near earnings is expected and is not a free lunch —
 the market is pricing in the uncertainty of the announcement. Selling
-into earnings IV is a strategy in itself, but goes beyond anomaly
-detection.
+into earnings IV is a strategy in itself, but goes beyond what this
+IV-vs-surface screen surfaces.
 
 ### LT capital gains
 

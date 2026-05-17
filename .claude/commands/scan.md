@@ -1,5 +1,5 @@
 ---
-description: Scan an option chain for mispriced LEAPS (sell or buy candidates)
+description: Scan an option chain and rank options by IV vs. a fitted surface (sell or buy candidates)
 ---
 
 Run the options scanner for the provided ticker and any extra flags:

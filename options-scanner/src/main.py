@@ -1,10 +1,14 @@
-"""Options scanner — find mispriced LEAPS to sell or buy.
+"""Options scanner — rank options by IV vs. a fitted surface, to sell or buy.
+
+The ranking is a screening heuristic, not a mispricing or arbitrage
+claim — IV+pp deviations can reflect skew, demand, event risk, or
+stale prints just as easily as a tradeable signal.
 
 Modes:
   (default)  show both calls and puts
   --calls    calls only
   --puts     puts only
-  --buy      reverse ranking to find underpriced options to buy
+  --buy      reverse ranking — surface IV-cheap candidates (below the surface)
   --roll     show net credit vs. closing an existing short position
 """
 
@@ -22,7 +26,7 @@ log = logging.getLogger(__name__)
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Scan option chain for mispriced premium."
+        description="Rank an option chain by IV vs. a fitted surface."
     )
     parser.add_argument("ticker", metavar="TICKER")
 
@@ -33,7 +37,8 @@ def main() -> None:
     parser.add_argument(
         "--buy",
         action="store_true",
-        help="Buy mode: rank by lowest IV (underpriced) instead of highest",
+        help="Buy mode: rank by IV vs. surface, lowest first "
+             "(IV-cheap relative to neighbors)",
     )
     parser.add_argument(
         "--roll",

@@ -2,19 +2,29 @@
 
 ## Purpose
 
-Scan an option chain to find overpriced options
-worth selling: covered calls, cash-secured puts, and roll candidates.
-Ranks by IV excess — how much the option's implied volatility sits
-above a fitted 2-D surface — to surface genuinely rich premium vs.
-options that merely look expensive because they're deep ITM.
+Scan an option chain and rank each option by IV excess — how far its
+implied volatility sits above or below a fitted 2-D surface — to
+surface IV-rich candidates for covered calls, cash-secured puts, and
+roll setups (or IV-cheap candidates in buy mode).
+
+The output is a **screening heuristic, not a mispricing or arbitrage
+claim**. Vol smiles and skew are legitimate, the no-arbitrage
+principle does not require the surface to be smooth, and IV+pp
+deviations can reflect demand pressure, event risk, or stale prints
+as easily as a tradeable signal. Phrase user-facing copy accordingly
+— "mispriced", "overpriced", "underpriced", "anomaly" are out;
+"IV-rich", "IV-cheap", "outlier", "stands above/below the surface"
+are in. "Rich premium" / "cheap premium" are conventional trader
+vernacular and remain fine.
 
 ## How it works
 
 1. Fetch all expirations with DTE >= min_dte from Yahoo Finance
 2. Build a 2-D IV surface: IV ≈ f(log-moneyness, √T)
-3. Compute IV excess = actual IV − fitted IV (positive = overpriced)
+3. Compute IV excess = actual IV − fitted IV (positive = IV-rich,
+   sits above the fitted surface)
 4. Annotate each option with earnings events within its expiration
-   window (elevated IV around earnings is expected, not anomalous)
+   window (elevated IV around earnings is expected, not a signal)
 5. Display ranked table including delta, annualized yield, and OI
 
 ## Running the tool

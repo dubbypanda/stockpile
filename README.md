@@ -28,11 +28,13 @@ tracker, cost basis charts, and shared parsing/finance utilities.
 - **[positions](positions/README.md)** — Google Sheets position tracker
 - **[cost-basis-charts](cost-basis-charts/README.md)** — Interactive
   cost basis vs. price charts (YouTube tutorial project)
-- **[options-scanner](options-scanner/README.md)** — Find mispriced
-  options to sell or buy. Three entry points: a CLI scanner for a single
-  ticker, a portfolio scanner that reads a brokerage CSV, and a
-  Streamlit web UI. Supports Yahoo Finance (default, no setup) or the
-  Schwab developer API (real-time quotes and Greeks)
+- **[options-scanner](options-scanner/README.md)** — Rank options by
+  how far their implied volatility sits above or below a fitted
+  surface, surfacing IV-rich candidates to sell or IV-cheap ones to
+  buy. Three entry points: a CLI scanner for a single ticker, a
+  portfolio scanner that reads a brokerage CSV, and a Streamlit web UI.
+  Supports Yahoo Finance (default, no setup) or the Schwab developer
+  API (real-time quotes and Greeks)
 - **[google-sheets-setup](google-sheets-setup/README.md)** — Google
   Sheets API setup docs
 

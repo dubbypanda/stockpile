@@ -76,13 +76,14 @@ Top candidates ranked by IV excess above the fitted volatility surface:
 {chr(10).join(rows_lines)}
 
 Column notes: IV+pp = how many percentage points this option's IV exceeds the smooth surface \
-fit (positive = priced rich vs. peers). Ann% for calls = annualized yield vs. spot; for puts \
-= vs. strike (capital at risk). Spread% = bid-ask spread as % of mid.
+fit (positive = IV-rich vs. peers — a ranking signal, not a mispricing claim). \
+Ann% for calls = annualized yield vs. spot; for puts = vs. strike (capital at risk). \
+Spread% = bid-ask spread as % of mid.
 
 In 3-4 short paragraphs, cover:
-1. Is there a genuine pricing anomaly (meaningful IV+pp) or is the chain uniformly priced?
+1. Is there a meaningful IV outlier (significant IV+pp) or is the chain's IV roughly uniform?
 2. What does the delta range say about assignment risk for the top candidates?
-3. Which specific strike/expiration looks most attractive to sell, and why?
+3. Which specific strike/expiration is the top-ranked candidate to sell, and why?
 4. Key risks or caveats: earnings timing, bid-ask spread, liquidity, anything else notable.
 
 Be direct and specific. No need to re-explain what columns mean."""

@@ -863,7 +863,7 @@ def _tab_single() -> None:
             with a1:
                 action = st.radio(
                     "Direction",
-                    ["Sell (find overpriced)", "Buy (find underpriced)"],
+                    ["Sell (IV-rich candidates)", "Buy (IV-cheap candidates)"],
                     horizontal=True,
                     key="s_action",
                 )
