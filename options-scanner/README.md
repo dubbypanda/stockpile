@@ -181,8 +181,8 @@ SPX!       use exactly "SPX" — fetches the stock, not the index
 |------|---------|---------|
 | `--calls` / `--puts` | both | Show only calls or only puts |
 | `--buy` | off | Buy mode: rank by IV vs. surface, lowest first (IV-cheap relative to neighbors) |
-| `--min-dte` | 365 | Minimum days to expiration |
-| `--max-dte` | none | Maximum days to expiration |
+| `--min-dte` | 30 | Minimum days to expiration |
+| `--max-dte` | 90 | Maximum days to expiration |
 | `--min-oi` | 25 | Minimum open interest. Filters the top candidates table only; the volatility-surface chart and per-expiration chain table show all strikes, with low-OI rows shaded yellow as a liquidity warning. |
 | `--min-delta` | 0.10 | Exclude abs(delta) below this |
 | `--max-delta` | 0.75 | Exclude abs(delta) above this |
@@ -498,6 +498,14 @@ Planned improvements, roughly in priority order:
 
 - **GEX on portfolio tab** — extend the GEX chart to each position
   in the portfolio scan, not just the single-ticker tab.
+
+- **GEX-aware option ranking** — fold dealer-gamma context into the
+  chain output: tag strikes sitting just below a large positive GEX
+  wall (pinning resistance — favorable for covered calls), strikes
+  inside a negative-GEX amplifying zone (caution for sellers), and
+  proximity to the zero-gamma flip level. GEX is most reliable on
+  near-term chains where OI is dense, which lines up well with the
+  scanner's default DTE range (30–90).
 
 - **IV term structure chart** — plot IV by expiration (rather than by
   strike) to show whether near-term or far-dated vol is elevated.
