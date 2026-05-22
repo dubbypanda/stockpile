@@ -29,7 +29,7 @@ on the `st.tabs(...)` registration are a downstream symptom.
 
 ```
 options-scanner/
-  src/
+  options_scanner/
     tabs/
       __init__.py
       single.py        # _tab_single + tab-local helpers
@@ -55,77 +55,55 @@ options-scanner/
 
 Highest leverage by far — every other refactor gets easier afterward.
 
-## 2. Extract inline CSS to a real file
+## 2. Extract inline CSS to a real file ✅ DONE 2026-05-22
 
-Currently a triple-quoted blob inside `run_app.py`. Move to
-`options-scanner/src/styles.css`, load via:
+CSS now lives in `options_scanner/styles.css`, loaded once at the
+top of `run_app.py` via `Path.read_text()`. The dynamic accent
+colors flow through CSS custom properties (`--primary`,
+`--primary-hover`) instead of f-string interpolation — run_app
+injects a 2-line `:root` block per rerun and all the rule
+selectors reference `var(--primary)`.
 
-```python
-from pathlib import Path
-_CSS = (Path(__file__).parent / "src" / "styles.css").read_text()
-st.markdown(f"<style>{_CSS}</style>", unsafe_allow_html=True)
-```
+## 3. DRY the chain row-building between Yahoo and Schwab ✅ DONE 2026-05-22
 
-Gains: editor syntax highlighting, CSS comments without escaping,
-easier diffs, no `f""" ... """` interpolation hazards. Cheap win.
+The shared half lives in `chain_common.py` now:
 
-## 3. DRY the chain row-building between Yahoo and Schwab
+- `safe_float` / `safe_int` (formerly duplicated as `_safe_float` /
+  `_safe_int` in both modules; underscores dropped on promotion).
+- `build_option_row(...)` — applies the quote-quality filters
+  (bid/ask non-zero, mid fallback via (bid+ask)/2 → last, mid > 0,
+  iv ≥ 0.01, strike > 0) and assembles the canonical 17-column row.
+  Returns None to drop a row.
 
-`chain.py` and `schwab_chain.py` are ~90% structural duplicates: same
-17-column schema, same `_safe_float`/`_safe_int` helpers, same
-quote-quality filters, same annualization formula. The 0DTE fix had
-to land in both — that pattern will repeat as we add columns or
-filters.
+Each provider keeps its own raw-data parsing (Yahoo iterates
+yfinance DataFrames, Schwab iterates the JSON expiration map) and
+funnels through `build_option_row` at the end. Greeks stay
+provider-specific: chain.py computes BS delta/gamma, schwab_chain.py
+takes them from the broker — `build_option_row` is Greek-agnostic.
 
-Options:
+## 4. Convert `src/` to a proper Python package ✅ DONE 2026-05-22
 
-- Extract a `_build_option_row(side, K, bid, ask, mid, iv, oi, vol,
-  delta, gamma, dte, spot, exp_str)` helper used by both paths.
-- Or centralize the schema as a typed dict / dataclass so adding a
-  column touches one place, not two.
+`src/` is now `options_scanner/` — a real Python package registered
+in `pyproject.toml` via hatchling. The `sys.path.insert` shims in
+`run_app.py`, `run_scanner.py`, `run_portfolio.py`, `schwab_auth.py`
+and `tests/conftest.py` are gone; all imports use absolute
+`options_scanner.X` paths. Along the way: dropped the latent
+`display.py` / `display/` package collision by folding the CLI
+results-printer into `display/cli.py`.
 
-The Schwab path also gets its Greeks from the broker (no BS math
-needed), so the two flows aren't identical — the shared piece is the
-row assembly + filters, not the Greeks computation.
+## 5. Magic numbers in CSS layout → named constants ✅ DONE 2026-05-22
 
-## 4. Convert `src/` to a proper Python package
+Layout magic numbers are now CSS custom properties at the top of
+`styles.css`: `--pill-top`, `--wordmark-top`, `--sidebar-shift`,
+`--wordmark-left`, `--rescan-pill-left`,
+`--data-source-pill-left`, `--z-pill`, `--z-wordmark`. The
+sidebar-open variants use `calc(var(--pill-left) +
+var(--sidebar-shift))` so the three pills track each other through
+a single offset value. If a Streamlit version bump changes the
+sidebar's open width, only `--sidebar-shift` needs touching.
 
-Currently `options-scanner/src/` has no `__init__.py`; the
-`tests/conftest.py` does `sys.path.insert(0, src)` to make imports
-work. Functional, but:
-
-- IDE auto-imports don't always find these modules
-- Type-checkers (mypy, pyright) get confused
-- `python -m` invocation breaks
-
-Fix: add `__init__.py` files, register the package in
-`options-scanner/pyproject.toml`, drop the `sys.path` shim. ~30-minute
-change, pays for itself forever. Best done *after* the `tabs/` split
-above so the package structure lands together.
-
-## 5. Magic numbers in CSS layout → named constants
-
-The title-bar pill positioning relies on `left: 18rem`, `left: 30rem`,
-`left: 33rem`, `left: 45rem`, `top: 13px`, and a hardcoded `12rem`
-favicon-width assumption. A Streamlit version bump could shift any of
-these and break the layout silently.
-
-After (2) lands, define these as CSS custom properties at the top of
-`styles.css`:
-
-```css
-:root {
-  --logo-width: 12rem;
-  --pill-top: 13px;
-  --pill-left-collapsed: 18rem;
-  --pill-left-expanded: 33rem;
-  ...
-}
-```
-
-Then individual rules reference `var(--pill-left-collapsed)`. One
-source of truth per layout dimension, and the constants are visible
-when debugging.
+The `--logo-width: 12rem` REFACTOR.md item disappeared on its own
+when the raster logo was replaced by the typographic wordmark.
 
 ---
 
