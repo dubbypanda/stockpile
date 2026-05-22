@@ -448,14 +448,14 @@ def render_mc_panel(
         )
     with n4:
         edge_sign = "+" if edge >= 0 else "−"
-        # Edge is the headline "is this a good trade?" answer.
-        # Positive: opened at a price better than the simulation's fair value.
+        # Compares market price to the simulation's fair value.
+        # Positive: market priced this below the simulation's fair value.
         metric_card(
-            label="Edge vs market",
+            label="Premium vs model",
             value=f"{edge_sign}${abs(edge):,.0f}",
             delta="▲ rich" if edge >= 0 else "▼ cheap",
             delta_sign="pos" if edge >= 0 else "neg",
-            help_text="MC fair value minus your open cost. Positive = you got a better-than-fair price; negative = you overpaid relative to the simulation.",
+            help_text="MC fair value minus your open cost. Positive = the market is pricing below the model here; negative = above. Diagnostic — the model is one calibrated view, not market truth.",
         )
 
     # ── Charts ─────────────────────────────────────────────────────────

@@ -196,11 +196,12 @@ def run_simulation(
     path_sample = paths[idx]
 
     metrics = summarize(terminal_pnl, terminal_spot, position.spot)
-    # ── MC fair value & edge vs market ──────────────────────────────────
+    # ── MC fair value & premium vs model ─────────────────────────────────
     # MC fair value = mean of discounted terminal payoffs (excluding the
-    # open-cost offset). Edge vs market = how much the market price differs
-    # from this fair value, scaled to per-contract dollars. Positive edge
-    # means the position was opened at a price better than fair → favorable.
+    # open-cost offset). Premium vs model = how the market price differs
+    # from this model value, scaled to per-contract dollars. Diagnostic —
+    # the model is one calibrated view, not arbitrage-free truth. Positive
+    # values mean the position was opened below the model's fair value.
     total_open_cost = sum(leg.open_cost for leg in position.legs)
     discount = float(np.exp(-position.risk_free_rate * (n_days / 365.0)))
     # Sum of terminal payoffs (positive long, negative short, sign already

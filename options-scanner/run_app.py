@@ -266,8 +266,8 @@ def _ivpp_help_for(buy: bool, opt_type: str = "option") -> str:
             f"Percentage points the option's IV sits ABOVE (+) or BELOW (−)"
             f" the fitted volatility surface. You're BUYING {plural} — you want"
             f" NEGATIVE values (the option is cheap relative to its peers, so"
-            f" you pay less than fair). Look for −3 pp or lower; near 0 is"
-            f" fair value; positive means you'd be overpaying."
+            f" you pay less than the surface implies). Look for −3 pp or lower;"
+            f" near 0 sits on the surface; positive means you're paying above it."
         )
     # Seller wants rich → positive IV+pp.
     return (
