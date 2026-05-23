@@ -15,8 +15,10 @@ def print_results(
     mode: str,
     roll_close_cost: float | None = None,
     min_oi: int = 25,
+    min_vol: int = 0,
     top_n: int = 10,
     buy: bool = False,
+    no_legend: bool = False,
 ) -> None:
     from tabulate import tabulate
 
@@ -31,7 +33,7 @@ def print_results(
         print(f"  Upcoming earnings: {', '.join(earn_strs)}")
     print(f"{'-' * 68}")
 
-    df = df[df["open_interest"] >= min_oi].copy()
+    df = df[(df["open_interest"] >= min_oi) & (df["volume"] >= min_vol)].copy()
     if df.empty:
         print(f"  No options found (min OI={min_oi}).")
         return
@@ -85,6 +87,8 @@ def print_results(
         print(tabulate(rows, headers="keys", tablefmt="simple"))
 
     print()
+    if no_legend:
+        return
     if buy:
         print("  How to read this table (BUY mode):")
         print("  IV+pp  -- The key column. Negative = option's IV sits below the")
