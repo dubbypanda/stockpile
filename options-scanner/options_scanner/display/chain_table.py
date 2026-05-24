@@ -28,7 +28,7 @@ from options_scanner.display.chain_styling import (
     BID_HELP,
     CELL_WARN,
     OI_HELP,
-    VOL_HELP,
+    vol_help_for,
     ivpp_help_for,
     low_oi_mask,
     low_vol_mask,
@@ -155,7 +155,8 @@ def show_chain_table(df_exp: pd.DataFrame, buy: bool, mode: str,
         "OI":    st.column_config.NumberColumn("OI", format="%d",
                                                width=65, help=OI_HELP),
         "Vol":   st.column_config.NumberColumn("Vol", format="%d",
-                                               width=65, help=VOL_HELP),
+                                               width=65,
+                                               help=vol_help_for(min_vol)),
     }
     if roll_close_cost is not None:
         col_cfg["NetCr"] = st.column_config.NumberColumn("Net Credit",

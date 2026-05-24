@@ -23,7 +23,7 @@ from options_scanner.display.chain_styling import (
     BID_HELP,
     CELL_WARN,
     OI_HELP,
-    VOL_HELP,
+    vol_help_for,
     ivpp_help_for,
     low_oi_mask,
     low_vol_mask,
@@ -51,7 +51,9 @@ def show_df(sub: pd.DataFrame, roll_close_cost: float | None = None,
         )
         return
 
+    rank_col = {"Top": sub["_rank"]} if "_rank" in sub.columns else {}
     disp = pd.DataFrame({
+        **rank_col,
         "Strike": sub["strike"].apply(lambda x: f"${x:.0f}"),
         "Expiration": sub["expiration"].apply(
             lambda e: datetime.strptime(e, "%Y-%m-%d").strftime("%b %d '%y")
@@ -84,7 +86,11 @@ def show_df(sub: pd.DataFrame, roll_close_cost: float | None = None,
                subset=["Vol"])
     )
 
-    col_cfg = {
+    col_cfg = {}
+    if "_rank" in sub.columns:
+        col_cfg["Top"] = st.column_config.NumberColumn("Top", format="%d",
+                                                       width=45)
+    col_cfg.update({
         "Strike":     st.column_config.TextColumn("Strike", width=75),
         "Expiration": st.column_config.TextColumn("Expiration", width=105),
         "DTE":   st.column_config.NumberColumn("DTE", format="%d", width=55),
@@ -106,8 +112,9 @@ def show_df(sub: pd.DataFrame, roll_close_cost: float | None = None,
         "OI":    st.column_config.NumberColumn("OI", format="%d",
                                                width=65, help=OI_HELP),
         "Vol":   st.column_config.NumberColumn("Vol", format="%d",
-                                               width=65, help=VOL_HELP),
-    }
+                                               width=65,
+                                               help=vol_help_for(min_vol)),
+    })
     if roll_close_cost is not None:
         col_cfg["NetCr"] = st.column_config.NumberColumn("Net Credit",
                                                          format="$%+.2f",
@@ -141,6 +148,8 @@ def show_scan_results(df: pd.DataFrame, mode: str, buy: bool,
         )
         sub = sub[(sub["open_interest"] >= min_oi)
                   & (sub["volume"] >= min_vol)].head(top_n)
+        sub = sub.copy()
+        sub["_rank"] = range(1, len(sub) + 1)
         if len(to_show) > 1:
             st.subheader(type_labels[opt_type])
         show_df(sub, roll_close_cost, min_oi, min_vol,

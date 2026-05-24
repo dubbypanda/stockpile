@@ -27,7 +27,10 @@ BID_HELP = ("Yellow: spread is wider than 1.5× the median for this table"
 OI_HELP = ("Yellow: OI is below 2× the min OI filter"
            " — limited liquidity, harder to fill at a good price.")
 
-VOL_HELP = "Yellow: fewer than 4 contracts traded today — very thin activity."
+def vol_help_for(min_vol: int) -> str:
+    thresh = max(min_vol * 2, 4)
+    return (f"Yellow: fewer than {thresh} contracts traded today"
+            f" — very thin activity.")
 
 
 def wide_spread_mask(bid: pd.Series, ask: pd.Series,

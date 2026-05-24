@@ -79,6 +79,7 @@ def show_iv_chart(df: pd.DataFrame, spot: float, mode: str,
         e: int(chart_df[(chart_df["expiration"] == e) & chart_df["is_top"]].shape[0])
         for e in expirations
     }
+    best_exps = {exp for (_, _, exp), r in top_ranks.items() if r == 1}
     picks_df = chart_df[chart_df["is_top"]]
     if not picks_df.empty:
         extreme_idx = (picks_df["iv_excess"].idxmin() if buy
@@ -100,7 +101,8 @@ def show_iv_chart(df: pd.DataFrame, spot: float, mode: str,
             options=expirations,
             index=default_idx,
             format_func=lambda d: (
-                f"{exp_labels[d]}  ({pick_counts[d]} pick"
+                f"{'★ ' if d in best_exps else ''}{exp_labels[d]}"
+                f"  ({pick_counts[d]} pick"
                 f"{'s' if pick_counts[d] != 1 else ''})"
             ),
             key=f"{key_prefix}_chart_exp",
