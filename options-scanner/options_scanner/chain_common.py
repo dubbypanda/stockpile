@@ -57,6 +57,8 @@ def build_option_row(
     gamma: float,
     open_interest: int,
     volume: int,
+    theta: float = 0.0,
+    vega: float = 0.0,
 ) -> dict | None:
     """Apply quote-quality filters and assemble a canonical chain row.
 
@@ -103,6 +105,8 @@ def build_option_row(
         "iv_excess":      0.0,
         "delta":          delta,
         "gamma":          gamma,
+        "theta":          theta,
+        "vega":           vega,
         "ann_yield_pct":  ann_yield,
         "open_interest":  open_interest,
         "volume":         volume,

@@ -19,8 +19,12 @@ from __future__ import annotations
 import streamlit as st
 
 
-PROVIDER_LABELS = {"yahoo": "Yahoo Finance", "schwab": "Schwab"}
-PROVIDER_COLORS = {"yahoo": "#16a34a", "schwab": "#2563eb"}   # green / blue
+PROVIDER_LABELS = {"yahoo": "Yahoo Finance", "schwab": "Schwab", "moomoo": "Moomoo"}
+PROVIDER_COLORS = {
+    "yahoo":  "#16a34a",   # green
+    "schwab": "#2563eb",   # blue
+    "moomoo": "#f97316",   # orange
+}
 
 
 def tz_abbr(ts) -> str:

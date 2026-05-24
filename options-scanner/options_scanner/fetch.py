@@ -32,16 +32,20 @@ from options_scanner.iv_filters import DEFAULT_CONFIG, SurfaceFilterConfig
 def fetch_and_enrich(ticker: str, opt_type: str, min_dte: int,
                      max_dte: int | None, provider: str = "yahoo",
                      schwab_config: dict | None = None,
-                     surface_filters: SurfaceFilterConfig = DEFAULT_CONFIG):
+                     surface_filters: SurfaceFilterConfig = DEFAULT_CONFIG,
+                     moomoo_config: dict | None = None):
     from options_scanner.chain import fetch_chain
     from options_scanner.iv_surface import compute_iv_excess
     from options_scanner.earnings import fetch_earnings_dates, annotate_earnings
     try:
         df = fetch_chain(ticker, opt_type=opt_type, min_dte=min_dte,
                          max_dte=max_dte, provider=provider,
-                         schwab_config=schwab_config)
-    except ValueError as exc:
+                         schwab_config=schwab_config,
+                         moomoo_config=moomoo_config)
+    except (ValueError, OSError, ConnectionRefusedError, RuntimeError) as exc:
         return pd.DataFrame(), [], str(exc)
+    except Exception as exc:  # noqa: BLE001 — surface Moomoo/Schwab SDK errors
+        return pd.DataFrame(), [], f"{type(exc).__name__}: {exc}"
     if df.empty:
         return df, [], None
     df = compute_iv_excess(df, surface_filters=surface_filters)
@@ -53,16 +57,20 @@ def fetch_and_enrich(ticker: str, opt_type: str, min_dte: int,
 @st.cache_data(ttl=300, show_spinner=False)
 def fetch_position(ticker: str, min_dte: int, provider: str = "yahoo",
                    schwab_config: dict | None = None,
-                   surface_filters: SurfaceFilterConfig = DEFAULT_CONFIG):
+                   surface_filters: SurfaceFilterConfig = DEFAULT_CONFIG,
+                   moomoo_config: dict | None = None):
     """Cached per-ticker chain fetch for portfolio tab."""
     from options_scanner.chain import fetch_chain
     from options_scanner.iv_surface import compute_iv_excess
     from options_scanner.earnings import fetch_earnings_dates, annotate_earnings
     try:
         df = fetch_chain(ticker, opt_type="calls", min_dte=min_dte,
-                         provider=provider, schwab_config=schwab_config)
-    except ValueError as exc:
+                         provider=provider, schwab_config=schwab_config,
+                         moomoo_config=moomoo_config)
+    except (ValueError, OSError, ConnectionRefusedError, RuntimeError) as exc:
         return pd.DataFrame(), [], str(exc)
+    except Exception as exc:  # noqa: BLE001 — surface Moomoo/Schwab SDK errors
+        return pd.DataFrame(), [], f"{type(exc).__name__}: {exc}"
     if df.empty:
         return df, [], None
     df = compute_iv_excess(df, surface_filters=surface_filters)
