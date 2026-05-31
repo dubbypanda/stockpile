@@ -178,7 +178,10 @@ function renderDashboard() {
     indBtn.className = 'ind-btn'; indBtn.textContent = '⚙ Indicators';
     const tickerInline = document.createElement('div');
     tickerInline.className = 'ticker-inline';
-    tickerInline.innerHTML = `<span class="chip">${ps.symbol}</span><span class="price">--</span><span class="delta flat">--%</span>`;
+    const _chip = document.createElement('span'); _chip.className = 'chip'; _chip.textContent = ps.symbol;
+    const _price = document.createElement('span'); _price.className = 'price'; _price.textContent = '--';
+    const _delta = document.createElement('span'); _delta.className = 'delta flat'; _delta.textContent = '--%';
+    tickerInline.append(_chip, _price, _delta);
 
     const controls = document.createElement('div');
     controls.className = 'controls';
@@ -273,7 +276,10 @@ async function initPane(paneId) {
     wireLive(paneId);
   } catch (err) {
     console.error(`[Pane ${paneId}]`, err);
-    loaderEl.innerHTML = `<span style="color:var(--red)">⚠ ${err.message}</span>`;
+    const _err = document.createElement('span');
+    _err.style.color = 'var(--red)';
+    _err.textContent = `⚠ ${err.message}`;
+    loaderEl.replaceChildren(_err);
     const d = pane.querySelector('.delta');
     if (d) { d.textContent = 'Error'; d.className = 'delta down'; }
   } finally {

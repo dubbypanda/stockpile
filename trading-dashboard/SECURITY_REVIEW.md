@@ -17,27 +17,31 @@ found.**
 | Secrets | None hardcoded. ✅ |
 | DOM XSS | All `innerHTML` sinks in `indicators-render.js` interpolate numeric values (`.toFixed()`) or static strings. ✅ |
 
-## Low-severity / informational (address later, not blocking)
+## Low-severity / informational — RESOLVED 2026-05-31
 
-### 1. Unescaped symbol in `innerHTML` — self-XSS only
+### 1. Unescaped symbol in `innerHTML` — self-XSS only ✅ fixed
 
-`dashboard.js:181` and `:276` interpolate `ps.symbol` / `err.message`
-(which embeds the symbol) into `innerHTML`. The symbol is the user's own
-typed input — there is no attacker delivery path (no URL param, no
-server-side persistence, no share/import), and it is `.toUpperCase()`'d
-which breaks JS payloads. So it is self-XSS, not a real vuln.
+The ticker chip and the pane error message previously interpolated
+`ps.symbol` / `err.message` into `innerHTML`. These were only self-XSS
+(no attacker delivery path; symbol is `.toUpperCase()`'d), but both are
+now built with `document.createElement` + `textContent` in
+`dashboard.js`, so no user input reaches `innerHTML`.
 
-Cheap to harden: build those nodes with `textContent` instead of
-`innerHTML`.
+### 2. Wildcard CORS ✅ tightened
 
-### 2. Wildcard CORS
+`CORS(app, …)` in `app.py` was `{"origins": "*"}`. The frontend is
+served same-origin, so cross-origin access is not needed; origins are now
+scoped to `http://localhost:5000` / `http://127.0.0.1:5000`.
 
-`CORS(app, resources={r"/api/*": {"origins": "*"}})` (`app.py:6`).
-Acceptable here: the API is unauthenticated, cookie-less, and read-only
-public data, so cross-origin reads expose nothing sensitive. Worth
-tightening only if auth or private data is ever added.
+## Dependency advisories (Dependabot) — RESOLVED 2026-05-31
+
+- `Flask` bumped `3.1.0 -> 3.1.3` (session `Vary: Cookie` and fallback
+  signing-key advisories).
+- `flask-cors` bumped `5.0.0 -> 6.0.0` (improper regex path matching,
+  case-sensitivity handling, inconsistent CORS matching).
+- `requests` floor raised to `>=2.32.4` as general hygiene.
 
 ## Bottom line
 
-Safe to merge from a security standpoint. The two items above are
-optional hardening, not gating issues.
+Safe to merge. All review items and the Dependabot advisories have been
+addressed.

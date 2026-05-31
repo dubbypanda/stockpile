@@ -3,7 +3,7 @@ from flask import Flask, jsonify, request, render_template
 from flask_cors import CORS
 from data_source import fetch_ohlcv, _DATASOURCE_REGISTRY
 app = Flask(__name__)
-CORS(app, resources={r"/api/*": {"origins": "*"}})
+CORS(app, resources={r"/api/*": {"origins": ["http://localhost:5000", "http://127.0.0.1:5000"]}})
 _CACHE = {}
 _CACHE_TTL = {"1m":20,"3m":30,"5m":45,"15m":90,"30m":150,"1h":300,"4h":600,"1d":900,"1w":1800,"1M":3600}
 _PRICE_TTL = 300
