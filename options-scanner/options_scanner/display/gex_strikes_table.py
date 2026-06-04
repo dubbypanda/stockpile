@@ -14,6 +14,7 @@ from __future__ import annotations
 import pandas as pd
 import streamlit as st
 
+from options_scanner.compute.gex_summary import per_strike_gex
 from options_scanner.format import fmt_strike
 
 
@@ -40,18 +41,7 @@ def show_gex_strikes_of_interest(df: pd.DataFrame, spot: float) -> None:
     if df.empty or "gamma" not in df.columns:
         return
 
-    spot_sq = spot * spot
-    calls = df[df["type"] == "call"].copy()
-    puts = df[df["type"] == "put"].copy()
-    calls["gex"] = calls["gamma"] * calls["open_interest"] * 100 * spot_sq
-    puts["gex"] = -puts["gamma"] * puts["open_interest"] * 100 * spot_sq
-
-    per_strike = (
-        pd.concat([calls[["strike", "gex", "open_interest"]],
-                   puts[["strike", "gex", "open_interest"]]])
-        .groupby("strike", as_index=False)
-        .agg({"gex": "sum", "open_interest": "sum"})
-    )
+    per_strike = per_strike_gex(df, spot)
     if per_strike.empty or per_strike["gex"].abs().sum() == 0:
         return
 
