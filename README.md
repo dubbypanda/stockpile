@@ -33,6 +33,7 @@ each one works and how to use it with your own brokerage data.
 | [Find the Best Options with Schwab and Claude](https://youtu.be/-MsAMYX0kAM) | options-scanner — Schwab data source |
 | [Find the Best Covered Call — Options Scanner](https://youtu.be/WVGH-Hjbnjs?si=w6FqHtbGoJsx887d) | options-scanner — covered calls |
 | [I Asked Claude to Roll My Covered Call](https://youtu.be/qBNh6DIUSQQ?si=6M5g8Eu0mnODyb3g) | options-scanner — CLI agent |
+| [Find the Best Puts to Sell (Scanner + Claude)](https://youtu.be/ssSYnkTXnw4?si=57vhjK3o2AGr2wqZ) | options-scanner — cash-secured puts |
 
 ### Related — Yahoo Finance CLI series
 
