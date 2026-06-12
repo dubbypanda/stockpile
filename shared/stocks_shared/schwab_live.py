@@ -259,12 +259,33 @@ _SCHWAB_RESAMPLE = {
 }
 
 
+def _to_unix_seconds(value) -> int:
+    """Normalize Schwab candle timestamps to UTC epoch seconds."""
+    if isinstance(value, bool):
+        raise ValueError("Invalid candle datetime value")
+
+    if isinstance(value, (int, float)):
+        unit = "ms" if abs(float(value)) >= 10**12 else "s"
+        ts = pd.to_datetime(value, unit=unit, utc=True, errors="coerce")
+    elif isinstance(value, str) and value.strip().lstrip("-").isdigit():
+        number = int(value)
+        unit = "ms" if abs(number) >= 10**12 else "s"
+        ts = pd.to_datetime(number, unit=unit, utc=True, errors="coerce")
+    else:
+        ts = pd.to_datetime(value, utc=True, errors="coerce")
+
+    if pd.isna(ts):
+        raise ValueError(f"Invalid candle datetime value: {value!r}")
+
+    return int(ts.timestamp())
+
+
 def _parse_schwab_candles(data: dict) -> list[dict]:
     """Convert a Schwab price-history payload into dashboard candle dicts."""
     candles = (data or {}).get("candles") or []
     rows = [
         {
-            "time":   int(c["datetime"]) // 1000,
+            "time":   _to_unix_seconds(c["datetime"]),
             "open":   round(float(c["open"]), 4),
             "high":   round(float(c["high"]), 4),
             "low":    round(float(c["low"]), 4),
