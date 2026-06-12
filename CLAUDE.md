@@ -35,9 +35,9 @@ to `cost-basis-charts/output/`.
 uv run streamlit run options-scanner/run_app.py
 ```
 
-Opens at `http://localhost:8501` with tabs for Single Ticker, GEX,
-Portfolio, Spreads/Directional/Neutral, and **Live Charts** (the trading
-dashboard, embedded). To launch the scanner **and** the dashboard together
+Opens at `http://localhost:8501` with tabs for Single Ticker, Watchlist,
+Portfolio, GEX, Spreads/Directional/Neutral, and **Live Charts** (the
+trading dashboard, embedded). To launch the scanner **and** the dashboard together
 (so Live Charts is populated), run `uv run run.py` from the repo root
 instead.
 

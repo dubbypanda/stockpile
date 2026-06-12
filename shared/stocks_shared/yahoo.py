@@ -43,8 +43,27 @@ def normalize_ticker(ticker: str) -> str:
     return t
 
 
-def fetch_live_price(ticker: str) -> float | None:
-    """Return the last trade or regular market price for ticker."""
+class RateLimitError(Exception):
+    """Yahoo throttled the request (HTTP 429). Wait and retry."""
+
+
+def is_rate_limit_error(exc: BaseException) -> bool:
+    """True if exc looks like a Yahoo rate-limit (429) failure."""
+    if type(exc).__name__ == "YFRateLimitError":
+        return True
+    s = str(exc).lower()
+    return "too many requests" in s or "rate limit" in s or "429" in s
+
+
+def fetch_live_price(ticker: str,
+                     raise_on_rate_limit: bool = False) -> float | None:
+    """Return the last trade or regular market price for ticker.
+
+    With raise_on_rate_limit, a Yahoo 429 raises RateLimitError instead
+    of returning None, so callers can wait and retry. Either way a
+    throttled miss is never cached — a None in the cache would poison
+    every retry for the rest of the process.
+    """
     ticker = normalize_ticker(ticker)
     if ticker in _price_cache:
         return _price_cache[ticker]
@@ -52,7 +71,12 @@ def fetch_live_price(ticker: str) -> float | None:
         import yfinance as yf
         info = yf.Ticker(ticker).fast_info
         price = info.get("lastPrice") or info.get("regularMarketPrice")
-    except Exception:
+    except Exception as exc:
+        if is_rate_limit_error(exc):
+            if raise_on_rate_limit:
+                raise RateLimitError(
+                    f"Yahoo rate limit hit fetching {ticker}") from exc
+            return None
         price = None
     _price_cache[ticker] = price
     return price

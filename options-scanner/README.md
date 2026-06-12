@@ -91,9 +91,14 @@ The options-analysis tabs:
   distribution. The data source (Yahoo Finance / Schwab / Moomoo)
   toggle sits in the title bar so you can flip between sources without
   opening the sidebar.
-- **GEX** — a standalone Gamma Exposure view for one ticker (the same
-  chart also appears below the volatility surface on the Single Ticker
-  tab). See the GEX section below.
+- **Watchlist** — type a basket of tickers (commas, spaces, or new
+  lines) and scan the lot — no broker account needed. Watchlists can
+  be **saved by name** and reloaded later along with the filters they
+  were saved with; a few starter baskets ship with the app under a
+  `Starter:` prefix (e.g. `Starter: Mega Caps`) so they're easy to
+  tell apart from your own saved lists, which stay local. A Sell/Buy
+  direction toggle ranks IV-rich premium to write or IV-cheap
+  contracts to buy.
 - **Portfolio** — drag in a brokerage CSV (Schwab, Robinhood, Fidelity,
   Merrill, or a hand-written
   [stockpile file](../docs/stockpile-format.md)), pick the format, hit
@@ -101,16 +106,12 @@ The options-analysis tabs:
   collapsible section, with a Recommended Action card above the table
   translating the top IV-rich pick into explicit SELL TO OPEN / ROLL
   instructions. The validator runs automatically on upload and shows
-  any problems before you scan.
-
-  Instead of a CSV you can switch the **Input source** to **Watchlist**
-  and type a basket of tickers (commas, spaces, or new lines) — no
-  broker account needed. Watchlists can be **saved by name** and
-  reloaded later along with the filters they were saved with; a few
-  starter baskets (Mega Caps, Semiconductors, High IV, Index ETFs) ship
-  with the app, and your own saved lists stay local. Both input sources
-  also produce a cross-ticker IV+pp leaderboard above the per-ticker
+  any problems before you scan. Both Watchlist and Portfolio scans
+  produce a cross-ticker IV+pp leaderboard above the per-ticker
   results.
+- **GEX** — the Gamma Exposure view: one or more tickers, with
+  render-time Side (Calls/Puts/Both) and Min OI filters on the stored
+  scan. See the GEX section below.
 - **Spreads** — power-user view of 13 multi-leg strategies ranked by
   risk/reward subject to a POP threshold. Click a row to see the
   payoff diagram (at-expiry + current value).
@@ -452,9 +453,9 @@ annualized. This gives the true return on capital at risk.
 
 ## Gamma Exposure (GEX)
 
-The web UI shows a **GEX bar chart** on its own **GEX** tab, and also
-below the volatility surface chart on the Single Ticker tab. It is not
-available in the CLI.
+The web UI shows a **GEX bar chart** on its own **GEX** tab, with
+Side (Calls/Puts/Both) and Min OI filters applied at render time —
+no rescan needed. It is not available in the CLI.
 
 ### What it is
 

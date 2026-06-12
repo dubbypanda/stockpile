@@ -131,10 +131,15 @@ def get_client(app_key: str, app_secret: str, callback_url: str,
 
 
 def fetch_live_price_schwab(client, ticker: str) -> float | None:
-    """Return live mark price for ticker, or None on error."""
+    """Return live mark price for ticker, or None on error.
+
+    Uses the plural get_quotes endpoint: get_quote puts the symbol in the
+    URL path, which 404s on class shares like BRK/B; get_quotes passes it
+    as a query parameter and handles the slash fine.
+    """
     try:
         ticker = normalize_ticker_schwab(ticker)
-        resp = client.get_quote(ticker)
+        resp = client.get_quotes([ticker])
         resp.raise_for_status()
         data = resp.json()
         quote = data.get(ticker, {}).get("quote", {})

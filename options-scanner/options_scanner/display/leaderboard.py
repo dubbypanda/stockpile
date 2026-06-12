@@ -143,20 +143,11 @@ def _render_table(board: pd.DataFrame, side: str, min_vol: int) -> None:
     """Render one leaderboard table, styled like the scan-results table."""
     kind = iv_scores.active_kind(board)
 
-    def _earn_tag(n) -> str:
-        try:
-            n = int(n)
-        except (ValueError, TypeError):
-            return ""
-        return f" · {n}E" if n > 0 else ""
-
     cols = {
         "Ticker": board["ticker"],
         "Strike": board["strike"].apply(fmt_strike),
-        "Expiration": board.apply(
-            lambda r: datetime.strptime(r["expiration"], "%Y-%m-%d")
-            .strftime("%b %d '%y") + _earn_tag(r.get("earnings_count")),
-            axis=1,
+        "Expiration": board["expiration"].apply(
+            lambda e: datetime.strptime(e, "%Y-%m-%d").strftime("%b %d '%y")
         ),
         "DTE":   board["dte"].astype(int),
         "Bid":   board["bid"].round(2),

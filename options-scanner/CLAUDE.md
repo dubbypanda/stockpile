@@ -81,7 +81,7 @@ Run `uv sync` from repo root after any `pyproject.toml` change.
 |---------|----------------------------------------------------|
 | Top     | Web UI only. Rank within the top-N list per type (1 = strongest signal); blank if not in top N |
 | Strike  | Option strike price                                |
-| Expiration | Expiration date; trailing `2E` = 2 earnings before exp |
+| Expiration | Expiration date                                 |
 | DTE     | Days to expiration                                 |
 | Bid/Ask/Mid | Market prices                                 |
 | IV%     | Implied volatility (annualized %)                  |

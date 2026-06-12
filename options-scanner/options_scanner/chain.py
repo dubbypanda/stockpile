@@ -16,7 +16,9 @@ from stocks_shared.black_scholes import (
     norm_cdf as _norm_cdf,
     norm_pdf as _norm_pdf,
 )
-from stocks_shared.yahoo import fetch_live_price, normalize_ticker
+from stocks_shared.yahoo import (
+    RateLimitError, fetch_live_price, is_rate_limit_error, normalize_ticker,
+)
 
 log = logging.getLogger(__name__)
 
@@ -42,7 +44,7 @@ def _fetch_chain_yahoo(ticker: str, opt_type: str = "both",
     import yfinance as yf
 
     ticker = normalize_ticker(ticker)
-    spot = fetch_live_price(ticker)
+    spot = fetch_live_price(ticker, raise_on_rate_limit=True)
     if not spot:
         raise ValueError(f"Could not fetch live price for {ticker}")
 
@@ -61,6 +63,8 @@ def _fetch_chain_yahoo(ticker: str, opt_type: str = "both",
     )
 
     rows = []
+    raw_seen = 0   # contracts Yahoo sent us, pre-filter
+    zeroed = 0     # contracts with no quote at all (bid=ask=0)
     for exp_str in expirations:
         exp_date = datetime.strptime(exp_str, "%Y-%m-%d").date()
         dte = (exp_date - today).days
@@ -69,6 +73,10 @@ def _fetch_chain_yahoo(ticker: str, opt_type: str = "both",
         try:
             chain = t.option_chain(exp_str)
         except Exception as exc:
+            if is_rate_limit_error(exc):
+                raise RateLimitError(
+                    f"Yahoo rate limit hit fetching {ticker} {exp_str}"
+                ) from exc
             log.warning("  Skipping %s: %s", exp_str, exc)
             continue
 
@@ -86,6 +94,10 @@ def _fetch_chain_yahoo(ticker: str, opt_type: str = "both",
                 if K <= 0:
                     continue  # math.log(spot / K) below blows up at K=0
                 iv = safe_float(row.get("impliedVolatility"))
+                raw_seen += 1
+                if (safe_float(row.get("bid")) <= 0
+                        and safe_float(row.get("ask")) <= 0):
+                    zeroed += 1
                 delta = _bs_delta(spot, K, T, _RISK_FREE_RATE, iv, side)
                 gamma = _bs_gamma(spot, K, T, _RISK_FREE_RATE, iv)
                 theta = _bs_theta(spot, K, T, _RISK_FREE_RATE, iv, side)
@@ -105,6 +117,18 @@ def _fetch_chain_yahoo(ticker: str, opt_type: str = "both",
                 )
                 if built is not None:
                     rows.append(built)
+
+    # Yahoo's soft throttle doesn't 429 — it serves HTTP-200 chains with
+    # every bid/ask zeroed (many IVs reduced to the 0.00001 placeholder)
+    # and the strike list truncated. Individual illiquid contracts can
+    # have no quote, but an entire chain of them is a throttled response
+    # (or a session with no quote data at all), not usable data — either
+    # way the scan should wait and retry rather than render nothing.
+    if raw_seen >= 10 and zeroed / raw_seen >= 0.85:
+        raise RateLimitError(
+            f"Yahoo returned a degraded option chain for {ticker} "
+            f"({zeroed} of {raw_seen} contracts have no quote — soft "
+            "rate limit)")
 
     return pd.DataFrame(rows) if rows else pd.DataFrame()
 

@@ -24,7 +24,7 @@ from options_scanner.ui_theme import (
 from options_scanner.display.scan_stamp import PROVIDER_LABELS, PROVIDER_COLORS
 from options_scanner.tabs.gex import tab_gex
 from options_scanner.tabs.live_charts import tab_live_charts
-from options_scanner.tabs.portfolio import tab_portfolio
+from options_scanner.tabs.portfolio import tab_portfolio, tab_watchlist
 from options_scanner.tabs.single import tab_single
 from options_scanner.tabs.spreads import tab_directional, tab_neutral, tab_spreads
 
@@ -294,22 +294,25 @@ st.markdown(
 )
 
 (
-    panel_single, panel_gex, panel_portfolio,
+    panel_single, panel_watchlist, panel_portfolio, panel_gex,
     panel_spreads, panel_directional, panel_neutral,
     panel_live,
 ) = st.tabs(
-    ["Single Ticker", "GEX", "Portfolio",
+    ["Single Ticker", "Watchlist", "Portfolio", "GEX",
      "Spreads", "Directional", "Neutral", "Live Charts"]
 )
 
 with panel_single:
     tab_single()
 
-with panel_gex:
-    tab_gex()
+with panel_watchlist:
+    tab_watchlist()
 
 with panel_portfolio:
     tab_portfolio()
+
+with panel_gex:
+    tab_gex()
 
 with panel_spreads:
     tab_spreads()

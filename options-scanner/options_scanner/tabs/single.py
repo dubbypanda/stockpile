@@ -9,9 +9,10 @@ ranks contracts by IV excess. Supports two flows:
   showing the credit/debit from rolling out of a user-supplied
   strike + expiration.
 
-Results panel includes the IV chart, GEX chart, chain table for the
-chosen expiration, the full "Top candidates" ranking, a Monte Carlo
-trade analyzer, and an HTML report download.
+Results panel includes the IV chart, chain table for the chosen
+expiration, the full "Top candidates" ranking, a Monte Carlo trade
+analyzer, and an HTML report download. (Gamma exposure lives in its
+own GEX tab.)
 """
 
 from __future__ import annotations
@@ -24,7 +25,6 @@ import streamlit as st
 from options_scanner.compute.top_ranks import compute_top_ranks
 from options_scanner.defaults import default_delta_range
 from options_scanner.display.chain_table import show_chain_table
-from options_scanner.display.gex_chart import show_gex_chart
 from options_scanner.display.iv_chart import show_iv_chart
 from options_scanner.display.outlook_card import render_outlook_card
 from options_scanner.display.scan_results import show_scan_results
@@ -666,10 +666,6 @@ def tab_single() -> None:
 
     show_surface_diagnostics(df_fit_full, res.get("surface_filters"),
                              res.get("algo_config"))
-
-    show_gex_chart(df_fit_full, spot,
-                    provider=st.session_state.get("scan_provider", "yahoo"),
-                    ticker=ticker_r)
 
     chosen_exp = st.session_state.get("s_chart_exp")
     if chosen_exp:
