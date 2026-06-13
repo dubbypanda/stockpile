@@ -259,17 +259,25 @@ _SCHWAB_RESAMPLE = {
 }
 
 
+# Epoch seconds for any realistic date top out around 4.1e9 (year ~2100),
+# while epoch milliseconds are >= ~1e11 for any date from 1973 onward. So
+# 1e11 separates the two units; a higher cut (e.g. 1e12) wrongly reads the
+# ms timestamps of pre-2001 dates — common in long daily histories — as
+# seconds, throwing them tens of thousands of years into the future.
+_MS_EPOCH_THRESHOLD = 10**11
+
+
 def _to_unix_seconds(value) -> int:
     """Normalize Schwab candle timestamps to UTC epoch seconds."""
     if isinstance(value, bool):
         raise ValueError("Invalid candle datetime value")
 
     if isinstance(value, (int, float)):
-        unit = "ms" if abs(float(value)) >= 10**12 else "s"
+        unit = "ms" if abs(float(value)) >= _MS_EPOCH_THRESHOLD else "s"
         ts = pd.to_datetime(value, unit=unit, utc=True, errors="coerce")
     elif isinstance(value, str) and value.strip().lstrip("-").isdigit():
         number = int(value)
-        unit = "ms" if abs(number) >= 10**12 else "s"
+        unit = "ms" if abs(number) >= _MS_EPOCH_THRESHOLD else "s"
         ts = pd.to_datetime(number, unit=unit, utc=True, errors="coerce")
     else:
         ts = pd.to_datetime(value, utc=True, errors="coerce")
