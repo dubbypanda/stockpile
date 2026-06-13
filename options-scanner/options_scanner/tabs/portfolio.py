@@ -719,9 +719,18 @@ def _render_scan_tab(is_watchlist: bool, k: str) -> None:
             subtitle="Richest IV+pp contracts across every scanned ticker.",
             eyebrow="TOP CANDIDATES",
         )
+        # Assisted put-selling (stub): a per-row "investigate" control on the
+        # Puts board, gated to watchlist + sell + Schwab. Yahoo can only read
+        # quotes; placing an order needs Schwab. See
+        # options-scanner/assisted-put-selling-implementation-plan.md.
+        _lb_provider = st.session_state.get("scan_provider", "yahoo")
+        _allow_investigate = (
+            is_watchlist and not stored_buy and _lb_provider == "schwab"
+        )
         render_leaderboard(results, stored_side, int(port_min_oi),
                            int(port_top), int(port_min_vol),
-                           delta_range=port_delta_range, buy=stored_buy)
+                           delta_range=port_delta_range, buy=stored_buy,
+                           allow_investigate=_allow_investigate)
 
     for res in results:
         pos    = res["position"]
