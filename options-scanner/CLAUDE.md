@@ -120,6 +120,29 @@ Arm with the `on_click` callbacks (`arm` / `disarm`), never an inline
 `if st.button(...)`: a callback runs before the rerun renders, so the
 button states are consistent within a single frame.
 
+**Place must be drawn with `confirm_gate.place_button()`** — a context
+manager, never a bare `st.button`. Sending an order is a couple of Schwab
+round trips, seconds long, and the bare button went on looking unpressed
+for every one of them; it got pressed a second time, and the two runs
+racing each other surfaced as a bogus "Couldn't resolve the target
+account" on an order that had gone out. `place_button` draws into an
+`st.empty()` slot and, on the click, immediately overwrites itself with a
+disabled **⏳ Sending order…** — enqueued before the caller's submit
+blocks, so the frontend shows a dead button for the whole trip. Wrap the
+submit in `st.spinner(confirm_gate.SENDING_SPINNER)` to say the same
+thing a second way. Two properties come with it:
+
+- It **disarms on the click**, ahead of the caller's own disarm. Any
+  element call after the submit (the spinner closing, an error) can raise
+  the rerun exception and end the run early, and the next run must not
+  find an armed Place with a queued second click waiting to fire it.
+- A body that returns without rerunning means the order **failed**, so
+  the slot goes back to the original label, still disabled. Retrying is
+  Cancel → Confirm → Place on purpose: "rejected" and "sent, then the
+  connection dropped" are indistinguishable from here, and re-attesting
+  the numbers is the cheap way to be sure. Leave **Cancel** enabled —
+  it's the only way out of that state.
+
 Also: don't write a live default straight into a keyed input on every
 rerun. Use `confirm_gate.reseed_on_change()`, which re-seeds only when
 the *basis* changes — an unconditional write clobbers the number the
@@ -127,7 +150,8 @@ user is mid-correction, so the error describing it never renders.
 
 **After placing**, every Place path must:
 
-1. disarm the gate,
+1. disarm the gate (`place_button` already did it on the click; the
+   explicit write stays because it's the step a reader looks for),
 2. on success, queue the center banner (`st.session_state["_osc_toast"]`)
    **and** drop the stored result so it can't also render inline,
 3. `st.rerun()` — a **full** rerun, not `scope="fragment"`: `run_app`
@@ -227,6 +251,26 @@ distinct widget keys. The selection indexes into the **writable subset**
 — indexing the full row list would build a call for whichever position
 sat at the same index.
 
+**A selection outlives the list it was made on.** Streamlit hands back a
+row *index*, and it survives a rerun that re-populated the table — so
+selling a position while its row was selected pointed that index past
+the end of the shortened list and took the tab down with `IndexError:
+list index out of range`. The quieter version of the same bug is worse:
+when the list is still long enough, the index lands on whichever
+position slid into the slot and opens an order screen on something
+nobody picked.
+
+Both selectable tables on this tab therefore fold
+`leaderboard.fingerprint_ids(...)` into their widget key — the stock
+table on its tickers, the option tables on `_leg_id` — so the widget is
+rebuilt, and the selection cleared, exactly when a row index would start
+meaning something else. It's the same guard `rows_fingerprint` gives the
+watchlist board, and any new selectable table over live positions needs
+one of the two. Fingerprint **identity only**: fold in a share count or
+a quantity and every quote refresh throws away a selection mid-decision.
+The bounds check behind it is belt-and-braces — an order screen must not
+answer a stale index with a traceback.
+
 Selecting a row with a free lot opens the covered-call builder, which
 hands off through the leaderboard's own `contract_from_row` and
 `open_investigate`. Build the contract dict by hand and it will drift
@@ -265,6 +309,96 @@ the panel still prices and places.
 The color scale is a **buyback** reading — below the surface is green
 (cheap to close), above it red — the opposite of the sell-side scale,
 because every screen sharing these rows is buying a leg back.
+
+## Rows that aren't live positions (Trades tab)
+
+`trades.row_alert(store_status, disp_status, exp_age)` is the single
+answer to "is there actually a position behind this row?", and the
+heading count, the row styling and the row's own stamp all read it —
+three places that must not disagree.
+
+Two ways a row stops being a position, and they look identical on screen
+if nothing says otherwise:
+
+- **The opening order died.** The everyday one: a sell-to-open placed in
+  the afternoon doesn't fill, and at 16:00 ET the broker retires it. Also
+  rejected, and canceled broker-side. Nothing was ever bought or sold,
+  but the store still says `open` — its lifecycle is driven by *our*
+  orders (placed, filled, closed), and none of these endings sends one.
+  The row showed a murmured lowercase **expired** among real positions.
+- **The contract expired** under a position that did fill
+  (`past_expiry_days`) — the same shape, rarer.
+
+Three rules worth keeping straight:
+
+- **The dead-order words only count from the broker.** They arrive
+  through `_display_status`, which hands back the broker's word *only*
+  while the store says `open`. A record the store itself calls `expired`
+  or `canceled` is settled history and must not be stamped — otherwise
+  the whole archive lights up, and a cancel you made yourself (which
+  writes `status="canceled"`) shouts at you.
+- **Expiring today is not an expired contract.** It trades until the
+  close and the row is still actionable; flagging it would cry wolf every
+  expiration Friday. `working` is likewise never flagged — it may yet
+  fill.
+- **A dead order outranks an expired contract** when both apply. "You
+  never had this position" is the more important of the two.
+
+It stays **display-only** — no record is rewritten. Whether a contract
+finished worthless or was assigned is a fact at the broker, and the tab
+has no read that distinguishes them; guessing would book a realized P/L
+nobody confirmed. The row says what it knows and points at the broker.
+
+**Where it's computed matters.** The dead-order half needs the broker's
+order status, so `_alerts` is resolved *between* the status prefetch and
+the render loop, and the heading is held in an `st.empty()` until then —
+its count comes from that read. The loop reads `_disp_by_id` rather than
+recomputing the status word, which is what keeps the four surfaces
+honest.
+
+**How loud it has to be — and no louder.** Two attempts came back as
+"still doesn't stand out": a 10%-alpha amber tint, then a small
+`:red-background[…]` pill. It now reads **⚠️ ORDER EXPIRED — NEVER
+FILLED** in red bold caps on a solid light-gray row with a red left
+edge. Don't quietly walk that back toward tasteful.
+
+The other half of that verdict: a summary banner above the list was
+tried and **cut**. The row carries the message; a yellow box repeating
+it just pushed the list down. The only survivor outside the row is the
+small red count in the heading. Inside an opened row the notice stays —
+it's on demand, and it's what explains the blank cards.
+
+**Working orders get the same idea in a friendlier key.** An order still
+out there (broker `cancelable`, which is what the app's Cancel buttons
+already gate on — steadier than matching WORKING / QUEUED /
+PENDING_ACTIVATION) tints its row **light yellow**, no stamp and no red:
+it isn't a problem, it's just a state worth picking out. Its header also
+carries `bid … / ask … · limit …` (`_working_order_md`) so "is my price
+anywhere near the market?" doesn't need the row opened. The limit is the
+recorded `credit` — that *is* the price the order went out with — so it
+shows even when the quote doesn't come back.
+
+That readout costs the tab's **one exception to deferred loading**: an
+unresolved opening order is quoted while collapsed. The set is small and
+self-limiting (only orders still in flight, each leaving the moment it
+fills or dies), and the status read that would tell us it's working is
+queued in the same batch, so we can't wait for it first.
+
+Two mechanics behind it, in `_stamp_md` / `_alert_row_css`:
+
+- The stamp is **markdown, not HTML** — a `st.button` label renders
+  markdown only (see `_day_head_md`). The caps are written into the
+  string rather than applied with `text-transform`, so the shout
+  survives even if the CSS stops matching, and the `**` does double
+  duty: it bolds the text *and* emits the `<strong>` that the CSS hangs
+  the forced red on. That matters because the header pins
+  `button p {color: … !important}` — only a declaration on the element
+  itself beats it, never an inherited one.
+- The row rules are **per trade id**, emitted after the shared header
+  block whose transparent-background rule they must beat at equal
+  specificity, and the gray is **solid** with a separate value under
+  `html[data-osc-theme="dark"]` — the label color flips with the theme,
+  so one literal light gray would be near-white text on near-white.
 
 ## Manual test plan
 

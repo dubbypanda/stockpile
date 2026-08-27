@@ -38,7 +38,13 @@ uv run streamlit run options-scanner/run_app.py
 Opens at `http://localhost:8501` with tabs for Single Ticker, Watchlist,
 **Positions**, Trades, Portfolio, GEX, Spreads/Directional/Neutral, and
 **Live Charts** (the trading dashboard, embedded). The **Trades** tab lists
-trades placed from the scanner; the **Positions** tab manages every live
+trades placed from the scanner, each row colored by what's behind it: a
+row with no position (the opening order expired unfilled at the close,
+was rejected, or its contract has since expired) goes gray and is
+stamped **⚠️ ORDER EXPIRED — NEVER FILLED** in red, since nothing else
+moves such a record off "open"; an order still working goes light yellow
+and shows `bid / ask · limit` so you can see whether your price is near
+the market. The **Positions** tab manages every live
 Schwab option leg *and* the stock behind them. Select an option row and
 pick the action: **Close** (all or part of the leg), **Roll**, or
 **Unwind**. Close is the default. All three open on the same leg

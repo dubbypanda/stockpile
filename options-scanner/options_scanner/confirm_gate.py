@@ -17,6 +17,9 @@ so they can't drift apart:
   box on blur, so they'd have to click away, wait for the button to re-enable,
   and only then press Confirm. Validation lives in the ``arm`` callback, which
   sees the values as of the click.
+* **Place acknowledges the click before it blocks** (``place_button``): it swaps
+  itself for a disabled "sending" button on the way to the broker, so a
+  placement that takes seconds can't be pressed twice.
 
 The arm is stored under `confirm_key` as a snapshot of the input widgets' values,
 read from session_state by widget key. Two deliberate choices:
@@ -33,7 +36,8 @@ read from session_state by widget key. Two deliberate choices:
 
 from __future__ import annotations
 
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Iterator
+from contextlib import contextmanager
 
 import streamlit as st
 
@@ -149,3 +153,71 @@ def reset(confirm_key: str) -> None:
 
 # Shared button copy, so every screen explains the disabled Confirm the same way.
 ARMED_HELP = "Already confirmed — use Cancel below to change the order."
+
+SENDING_LABEL = "⏳ Sending order…"
+SENDING_HELP = ("Your order is on its way to Schwab — this can take a few "
+                "seconds.")
+SENDING_SPINNER = "Sending your order to Schwab — this can take a few seconds…"
+SENT_HELP = ("Already submitted — read the result below. To try again, Cancel "
+             "and confirm the order afresh.")
+
+
+@contextmanager
+def place_button(label: str, *, key: str, confirm_key: str,
+                 container=None) -> Iterator[bool]:
+    """The **Place** button, as a context manager whose value is "send it now".
+
+    ::
+
+        with confirm_gate.place_button("Place Trade · 🔴 LIVE", key=k,
+                                       confirm_key=ck, container=col) as submit:
+            if submit:
+                with st.spinner(confirm_gate.SENDING_SPINNER):
+                    result = _submit_order(...)
+                ...
+
+    Placing takes seconds — Schwab is a couple of round trips away — and a
+    plain ``st.button`` goes on looking unpressed for every one of them. It got
+    pressed a second time, and that click opened a *second* script run that
+    re-entered placement while the first was still in flight; two runs hitting
+    Schwab at once surfaced as a bogus "Couldn't resolve the target account" on
+    an order that had in fact been sent.
+
+    So the button is drawn into an ``st.empty()`` slot and, on the click that
+    yields True, immediately overwrites itself with a disabled copy. That swap
+    is enqueued *before* the caller's submit blocks, so the frontend shows a
+    dead "sending" button for the whole trip and there is nothing left to
+    click.
+
+    On the way out the slot is rewritten once more, back to the original label
+    but still disabled — reached only when the body returns without rerunning,
+    i.e. the order failed and its error is about to render. Leaving "⏳ Sending
+    order…" frozen above a rejection would say an order is still in flight when
+    none is. Retrying goes through Cancel → Confirm on purpose: "rejected" and
+    "sent, then the connection dropped" look identical from here, so the way
+    back to Place is the same one that attests to the numbers.
+
+    The acknowledgement itself keeps no session flag, deliberately: it lives and
+    dies inside the run that places the order, so a run interrupted between the
+    click and the submit can't leave a latch behind that fires an order later
+    without a click.
+
+    The click does drop the arm (`confirm_key`) on the way in, ahead of the
+    caller's own disarm. An order in flight is no longer a confirmable order,
+    and any element call after the submit — the spinner closing, an error — can
+    raise Streamlit's rerun exception and end this run early. Disarming first
+    means the next run comes back to Confirm rather than to an armed Place with
+    a queued second click waiting to fire it.
+    """
+    slot = (container if container is not None else st).empty()
+    clicked = slot.button(label, key=key, type="primary", width="stretch")
+    if clicked:
+        st.session_state[confirm_key] = False
+        slot.button(SENDING_LABEL, key=f"{key}__sending", type="primary",
+                    width="stretch", disabled=True, help=SENDING_HELP)
+    yield clicked
+    # Skipped by construction on the success paths: they end in st.rerun(),
+    # whose exception unwinds straight through this generator.
+    if clicked:
+        slot.button(label, key=f"{key}__sent", type="primary", width="stretch",
+                    disabled=True, help=SENT_HELP)

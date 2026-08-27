@@ -637,31 +637,39 @@ def _investigate_put_body(c: dict, ticker_df: "pd.DataFrame | None" = None,
         # set the flag only after the panel already rendered this run → the
         # collapse wouldn't show until a second click.
         _cc1, _cc2, _ = st.columns([1, 1, 3])
-        with _cc1:
-            _submit = st.button(f"Place Trade · {_badge}", key=f"confirm_{_ck}",
-                                type="primary", width="stretch")
         with _cc2:
             _cancel_box = st.container(key="investigate_cancel_box")
             _cancel_box.button("Cancel", key=f"cancel_{_ck}", width="stretch",
                                on_click=confirm_gate.disarm(_confirm_key))
-        if _submit:
-            _result = _submit_put_order(
-                scfg, order, cap, paper,
-                fill={"fill_spot": c.get("spot"), "fill_delta": c.get("delta"),
-                      "fill_iv": c.get("iv")})
-            st.session_state[_result_key] = _result
-            st.session_state[_confirm_key] = False
-            if _result.get("ok"):
-                # Rerun to close the dialog. Queue the toast for the NEXT run
-                # (emitted in run_app) — a toast created right before st.rerun()
-                # is discarded with the current run. We deliberately DON'T switch
-                # to the Trades tab: rendering it cold re-fetches live Schwab data
-                # for every tracked trade, which made placement feel like it hung
-                # for ~30s. Staying on the current (cached) tab keeps placement
-                # snappy; the toast points the user to the Trades tab.
-                st.session_state["_osc_toast"] = (
-                    _result["msg"] + "\nOpen the Trades tab to see it.")
-                st.rerun()
+        # Place swaps itself for a disabled "⏳ Sending order…" the moment it's
+        # clicked — a live placement runs for seconds and this button used to
+        # look untouched throughout, which got it pressed twice. See
+        # confirm_gate.place_button.
+        with confirm_gate.place_button(f"Place Trade · {_badge}",
+                                       key=f"confirm_{_ck}",
+                                       confirm_key=_confirm_key,
+                                       container=_cc1) as _submit:
+            if _submit:
+                with st.spinner(confirm_gate.SENDING_SPINNER):
+                    _result = _submit_put_order(
+                        scfg, order, cap, paper,
+                        fill={"fill_spot": c.get("spot"),
+                              "fill_delta": c.get("delta"),
+                              "fill_iv": c.get("iv")})
+                st.session_state[_result_key] = _result
+                st.session_state[_confirm_key] = False
+                if _result.get("ok"):
+                    # Rerun to close the dialog. Queue the toast for the NEXT
+                    # run (emitted in run_app) — a toast created right before
+                    # st.rerun() is discarded with the current run. We
+                    # deliberately DON'T switch to the Trades tab: rendering it
+                    # cold re-fetches live Schwab data for every tracked trade,
+                    # which made placement feel like it hung for ~30s. Staying
+                    # on the current (cached) tab keeps placement snappy; the
+                    # toast points the user to the Trades tab.
+                    st.session_state["_osc_toast"] = (
+                        _result["msg"] + "\nOpen the Trades tab to see it.")
+                    st.rerun()
 
     # Failures stay in the dialog (a success path reruns + toasts above, so the
     # dialog is already closing by the time we'd get here on success).
@@ -786,12 +794,30 @@ def rows_fingerprint(frame) -> str:
     rerun doesn't throw away a selection, while any change that reorders or
     re-populates the table starts a fresh widget with nothing selected.
     """
-    import hashlib
     try:
-        ident = "|".join(
+        return fingerprint_ids(
             f"{r.get('ticker', '')}:{r.get('strike', '')}:"
             f"{r.get('expiration', '')}"
             for _, r in frame.iterrows())
+    except Exception:
+        return "na"
+
+
+def fingerprint_ids(ids) -> str:
+    """`rows_fingerprint` for tables whose rows aren't a contract frame.
+
+    Takes the row identities directly — whatever makes "row N" mean one thing
+    rather than another for that table: a ticker for the stock positions, a
+    whole leg for the option ones. Same contract as `rows_fingerprint`, and any
+    selectable table that can be re-populated under the user wants one of the
+    two in its widget key.
+
+    Identity means *which* row, not what it currently says: fold a share count
+    or a quantity in here and every quote refresh throws the selection away.
+    """
+    import hashlib
+    try:
+        ident = "|".join(str(i) for i in ids)
     except Exception:
         return "na"
     return hashlib.blake2s(ident.encode("utf-8"), digest_size=5).hexdigest()

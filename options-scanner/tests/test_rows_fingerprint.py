@@ -12,7 +12,8 @@ otherwise.
 
 import pandas as pd
 
-from options_scanner.display.leaderboard import rows_fingerprint as fp
+from options_scanner.display.leaderboard import (fingerprint_ids as ids,
+                                                 rows_fingerprint as fp)
 
 
 def _board(rows=None):
@@ -75,3 +76,45 @@ def test_empty_and_unusable_frames_are_safe():
 
 def test_key_is_short_enough_for_a_widget_key():
     assert len(fp(_board())) <= 12
+
+
+# ── fingerprint_ids: the same guard for tables that aren't a contract frame ──
+# The Positions tab's tables (stock positions, and the option legs) hit the
+# same bug from the other direction: sell a position while its row is selected
+# and the retained index outlives the list it was made on. That crashed the tab
+# with `IndexError: list index out of range` when the list got shorter than the
+# index — and when it didn't, it quietly opened an order panel on whichever
+# position had slid into the slot.
+
+def test_ids_behave_like_the_frame_version():
+    assert ids(["AMD", "CPNG", "UBER"]) == ids(["AMD", "CPNG", "UBER"])
+    assert ids(["AMD", "CPNG", "UBER"]) != ids(["AMD", "CPNG"])
+
+
+def test_selling_a_position_rebuilds_the_table():
+    # THE regression, in miniature: UBER goes, and every index after it now
+    # means a different position.
+    held = ["AMD", "CPNG", "UBER", "NKE"]
+    assert ids(held) != ids([t for t in held if t != "UBER"])
+
+
+def test_reordering_changes_the_ids_key():
+    assert ids(["AMD", "CPNG"]) != ids(["CPNG", "AMD"])
+
+
+def test_an_empty_table_has_a_key_of_its_own():
+    assert isinstance(ids([]), str)
+    assert ids([]) != ids(["AMD"])
+
+
+def test_a_generator_works_like_a_list():
+    # Call sites pass a comprehension straight in.
+    assert ids(t for t in ["AMD", "CPNG"]) == ids(["AMD", "CPNG"])
+
+
+def test_ids_are_short_enough_for_a_widget_key():
+    assert len(ids([f"T{i}" for i in range(200)])) <= 12
+
+
+def test_unusable_ids_are_safe():
+    assert ids(None) == "na"

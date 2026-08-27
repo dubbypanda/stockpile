@@ -250,9 +250,29 @@ def test_only_writable_rows_get_a_checkbox():
 
 
 def test_the_two_tables_have_different_widget_keys():
-    # Same key twice is a duplicate-element crash.
+    # Same key twice is a duplicate-element crash. The selectable table's key is
+    # composed with a row fingerprint (see below); the locked one is constant.
     src = _stock_src()
-    assert '"stock_positions"' in src and '"stock_positions_locked"' in src
+    assert '"stock_positions_"' in src and '"stock_positions_locked"' in src
+
+
+def test_the_selectable_table_key_is_fingerprinted():
+    # The selection is a row INDEX, and it outlives the list it was made on.
+    # Sell a position while its row is selected and that index either points
+    # past the end (the IndexError that took the tab down) or — quieter and
+    # worse — at whichever ticker slid into the slot, opening the covered-call
+    # builder on a position nobody picked. Fingerprinting the tickers into the
+    # widget key rebuilds the table, and clears the selection, exactly when the
+    # row → position mapping changes.
+    src = _stock_src()
+    assert "fingerprint_ids(" in src
+
+
+def test_the_selection_index_is_bounds_checked():
+    # Belt and braces behind the fingerprint: an order screen must not answer a
+    # stale index with a traceback.
+    src = _stock_src()
+    assert "sel[0] >= len(writable)" in src
 
 
 def test_the_picked_row_is_indexed_into_the_selectable_subset():

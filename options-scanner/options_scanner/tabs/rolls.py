@@ -32,6 +32,7 @@ import streamlit as st
 from options_scanner import (
     confirm_gate, positions_cache, settings_ui, trade_actions, trades_store,
 )
+from options_scanner.display.leaderboard import fingerprint_ids
 from options_scanner.fetch import fetch_and_enrich
 # Leg snapshots (`leg_rows` + `kv_table_html`) live in `format` so the close
 # builder in `tabs.trades` can render the identical table without importing this
@@ -762,29 +763,33 @@ def _render_confirm(pos, tgt, close_q, close_mid, open_mid, posid, held_qty,
              "</style>").replace("KEY", _cancel_box), unsafe_allow_html=True)
 
         b1, b2, _ = st.columns([1, 1, 3])
-        with b1:
-            _do = st.button("Place Roll · 🔴 LIVE", key=f"roll_do_{posid}",
-                            type="primary", width="stretch")
         with b2:
             _cb = st.container(key=_cancel_box)
             _cb.button("Cancel", key=f"roll_cancel_{posid}", width="stretch",
                        on_click=confirm_gate.disarm(_confirm_key))
-        if _do:
-            _result = _submit_roll(scfg, roll, close_mid, open_mid, account_mask)
-            st.session_state[_result_key] = _result
-            st.session_state[_confirm_key] = False
-            if _result.get("ok"):
-                # Close the dialog and stay on this tab. The banner says where
-                # the order now lives — this tab places rolls, the Trades tab
-                # is where you watch one fill or cancel it. We deliberately
-                # don't switch tabs for you: rendering Trades cold re-fetches
-                # live data for every tracked trade, which makes placement feel
-                # like it hung (same reason the Sell dialog stays put).
-                st.session_state["_osc_toast"] = (
-                    _result["msg"]
-                    + "\nWatch it fill — or cancel it — on the Trades tab.")
-                st.session_state["_osc_goto_tab"] = "Positions"
-                st.rerun()
+        with confirm_gate.place_button("Place Roll · 🔴 LIVE",
+                                       key=f"roll_do_{posid}",
+                                       confirm_key=_confirm_key,
+                                       container=b1) as _do:
+            if _do:
+                with st.spinner(confirm_gate.SENDING_SPINNER):
+                    _result = _submit_roll(scfg, roll, close_mid, open_mid,
+                                           account_mask)
+                st.session_state[_result_key] = _result
+                st.session_state[_confirm_key] = False
+                if _result.get("ok"):
+                    # Close the dialog and stay on this tab. The banner says
+                    # where the order now lives — this tab places rolls, the
+                    # Trades tab is where you watch one fill or cancel it. We
+                    # deliberately don't switch tabs for you: rendering Trades
+                    # cold re-fetches live data for every tracked trade, which
+                    # makes placement feel like it hung (same reason the Sell
+                    # dialog stays put).
+                    st.session_state["_osc_toast"] = (
+                        _result["msg"] + "\nWatch it fill — or cancel it — on "
+                        "the Trades tab.")
+                    st.session_state["_osc_goto_tab"] = "Positions"
+                    st.rerun()
 
     # Failures stay in the dialog (success closes it via the rerun above).
     if _result and not _result.get("ok"):
@@ -1087,10 +1092,16 @@ def _render_unwind_detail(pos: dict, scfg: dict, market_open,
                     f"Both legs fill together or not at all."
                     ).replace("$", "\\$"))
         _pc, _cc, _ = st.columns([2, 2, 3])
-        with _pc:
-            if st.button("Place Unwind · 🔴 LIVE", key=f"unwind_place_{posid}",
-                         type="primary", width="stretch"):
-                _res = _submit_unwind(scfg, unwind, pos)
+        with _cc:
+            st.button("Cancel", key=f"unwind_cancel_{posid}", width="stretch",
+                      on_click=confirm_gate.disarm(_confirm_key))
+        with confirm_gate.place_button("Place Unwind · 🔴 LIVE",
+                                       key=f"unwind_place_{posid}",
+                                       confirm_key=_confirm_key,
+                                       container=_pc) as _do:
+            if _do:
+                with st.spinner(confirm_gate.SENDING_SPINNER):
+                    _res = _submit_unwind(scfg, unwind, pos)
                 st.session_state[_confirm_key] = False
                 if _res.get("ok"):
                     st.session_state["_osc_toast"] = _res["msg"]
@@ -1100,10 +1111,10 @@ def _render_unwind_detail(pos: dict, scfg: dict, market_open,
                     # an unwind for something already being unwound.
                     positions_cache.option_positions.clear()
                     st.rerun()
+                # Failed: surface it in this same run rather than leaving
+                # the panel silent until the next interaction.
                 st.session_state[_result_key] = _res
-        with _cc:
-            st.button("Cancel", key=f"unwind_cancel_{posid}", width="stretch",
-                      on_click=confirm_gate.disarm(_confirm_key))
+                _result = _res
 
     if _result and not _result.get("ok"):
         st.error(_result["msg"].replace("$", "\\$"))
@@ -1300,7 +1311,9 @@ def _render_stock_positions(scfg: dict, provider: str, market_open) -> None:
         return st.dataframe(
             styled, hide_index=True, width="stretch", column_config=_col_cfg,
             height=df_height(styled),
-            key="stock_positions" if selectable else "stock_positions_locked",
+            key=("stock_positions_"
+                 + fingerprint_ids(r["ticker"] for r in subset)
+                 if selectable else "stock_positions_locked"),
             **({"on_select": "rerun", "selection_mode": "single-row"}
                if selectable else {}))
 
@@ -1309,6 +1322,14 @@ def _render_stock_positions(scfg: dict, provider: str, market_open) -> None:
     # some rows and not others means splitting them — the same thing the
     # watchlist Calls board does for the same reason
     # (`leaderboard._render_calls_by_coverage`).
+    #
+    # The selectable table's key carries a fingerprint of the tickers in it, so
+    # the widget is rebuilt — selection cleared — exactly when a row index would
+    # start meaning a different position. Selling a position while its row was
+    # selected used to leave that index pointing past the end of the list, and
+    # the tab came down with an IndexError on the next refresh; a list that was
+    # still long enough was the quieter version of the same bug, opening the
+    # covered-call builder on a ticker nobody picked.
     writable = [r for r in rows if r["coverable"] >= 1]
     locked = [r for r in rows if r["coverable"] < 1]
 
@@ -1354,7 +1375,11 @@ def _render_stock_positions(scfg: dict, provider: str, market_open) -> None:
 
     sel = (event.selection.rows
            if event is not None and hasattr(event, "selection") else [])
-    if not sel:
+    if not sel or sel[0] >= len(writable):
+        # Out of range should be unreachable now the table key is fingerprinted
+        # above, but this is an order screen: a bounds check costs a line and
+        # turns any future regression into a row that simply doesn't open,
+        # instead of a traceback across the whole tab.
         st.session_state.pop("_stk_scroll", None)
         return
     if st.session_state.get("_stk_scroll") != sel[0]:

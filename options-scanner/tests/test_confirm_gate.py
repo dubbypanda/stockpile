@@ -238,3 +238,152 @@ def test_two_screens_arm_independently(st):
     cg.arm(CONFIRM, KEYS)()
     assert cg.armed(CONFIRM, KEYS) is True
     assert cg.armed(other, KEYS) is False
+
+
+# ── place_button: the click is acknowledged before the order goes out ─────────
+# A live placement is a couple of Schwab round trips, seconds long. The plain
+# button sat there looking unpressed for all of it, got pressed again, and the
+# second click opened a second script run that re-entered placement while the
+# first was still in flight — which surfaced as a bogus "couldn't resolve the
+# account" on an order that had actually been sent.
+
+PLACE_KEY = "confirm_AMD_120_2026-09-18"
+
+
+class FakeSlot:
+    """An ``st.empty()`` slot: records every button drawn into it. Only the
+    first draw is the real (clickable) button, so only it can report a click."""
+
+    def __init__(self, clicked: bool):
+        self._clicked = clicked
+        self.drawn: list[dict] = []
+
+    def button(self, label, **kw):
+        self.drawn.append({"label": label, **kw})
+        return self._clicked if len(self.drawn) == 1 else False
+
+    @property
+    def last(self) -> dict:
+        return self.drawn[-1]
+
+
+class FakeRender(FakeSt):
+    """session_state plus the one element call place_button makes."""
+
+    def __init__(self, clicked: bool = False):
+        super().__init__()
+        self.slot = FakeSlot(clicked)
+
+    def empty(self):
+        return self.slot
+
+
+@pytest.fixture
+def render(monkeypatch):
+    def _make(clicked: bool = False):
+        fake = FakeRender(clicked)
+        monkeypatch.setattr(cg, "st", fake)
+        return fake
+    return _make
+
+
+def test_unclicked_place_draws_one_live_button(render):
+    fake = render(clicked=False)
+    with cg.place_button("Place Trade · 🔴 LIVE", key=PLACE_KEY,
+                         confirm_key=CONFIRM) as go:
+        assert go is False
+    assert len(fake.slot.drawn) == 1
+    assert fake.slot.last["label"] == "Place Trade · 🔴 LIVE"
+    assert not fake.slot.last.get("disabled")
+
+
+def test_the_click_swaps_in_a_dead_button_before_the_order_is_sent(render):
+    fake = render(clicked=True)
+    with cg.place_button("Place Trade · 🔴 LIVE", key=PLACE_KEY,
+                         confirm_key=CONFIRM) as go:
+        assert go is True
+        # What the user is looking at while Schwab is being called: this is the
+        # whole point, so it must already be drawn when the body runs.
+        assert fake.slot.last["label"] == cg.SENDING_LABEL
+        assert fake.slot.last["disabled"] is True
+
+
+def test_nothing_clickable_remains_once_placement_starts(render):
+    fake = render(clicked=True)
+    with cg.place_button("Place Trade · 🔴 LIVE", key=PLACE_KEY,
+                         confirm_key=CONFIRM):
+        pass
+    # Every draw after the first is disabled — a second click can't reach the
+    # submit, whatever the user does with the mouse while the order is in
+    # flight.
+    assert all(b.get("disabled") for b in fake.slot.drawn[1:])
+
+
+def test_each_draw_gets_its_own_widget_key(render):
+    fake = render(clicked=True)
+    with cg.place_button("Place Trade · 🔴 LIVE", key=PLACE_KEY,
+                         confirm_key=CONFIRM):
+        pass
+    keys = [b["key"] for b in fake.slot.drawn]
+    assert keys[0] == PLACE_KEY
+    assert len(set(keys)) == len(keys), "duplicate keys would crash Streamlit"
+
+
+def test_a_failed_order_leaves_the_original_label_disabled(render):
+    # Falling out of the body without rerunning means the order failed and its
+    # error is about to render. "⏳ Sending order…" frozen above a rejection
+    # would claim an order is still on its way.
+    fake = render(clicked=True)
+    with cg.place_button("Place Trade · 🔴 LIVE", key=PLACE_KEY,
+                         confirm_key=CONFIRM):
+        pass
+    assert fake.slot.last["label"] == "Place Trade · 🔴 LIVE"
+    assert fake.slot.last["disabled"] is True
+
+
+class _Rerun(Exception):
+    """Stand-in for the exception st.rerun() raises."""
+
+
+def test_a_placed_order_ends_on_the_sending_button(render):
+    # The success paths end in st.rerun(), whose exception unwinds through the
+    # generator — nothing is drawn after it, and the rerun repaints anyway.
+    fake = render(clicked=True)
+    with pytest.raises(_Rerun):
+        with cg.place_button("Place Trade · 🔴 LIVE", key=PLACE_KEY,
+                             confirm_key=CONFIRM):
+            raise _Rerun
+    assert fake.slot.last["label"] == cg.SENDING_LABEL
+
+
+def test_the_button_is_drawn_into_the_column_it_was_given(render):
+    # The Place button lives in a column; the submit and its spinner render
+    # below, outside it. So the slot has to come from the caller's container.
+    fake = render(clicked=False)
+    col = FakeRender(clicked=False)
+    with cg.place_button("Place Trade", key=PLACE_KEY, confirm_key=CONFIRM,
+                         container=col):
+        pass
+    assert col.slot.drawn and not fake.slot.drawn
+
+
+def test_the_click_disarms_before_the_order_is_sent(render):
+    # Ahead of the caller's own disarm: an element call after the submit (the
+    # spinner closing, an error) can raise Streamlit's rerun exception and cut
+    # this run short. Whatever runs next must find Confirm, not an armed Place
+    # with a queued second click waiting to fire it.
+    fake = render(clicked=True)
+    fake.session_state[CONFIRM] = {"values": [1.25, 2]}
+    with cg.place_button("Place Trade · 🔴 LIVE", key=PLACE_KEY,
+                         confirm_key=CONFIRM):
+        assert fake.session_state[CONFIRM] is False
+
+
+def test_an_unclicked_place_leaves_the_arm_alone(render):
+    # Every rerun redraws this button; only a click may disarm.
+    fake = render(clicked=False)
+    fake.session_state[CONFIRM] = {"values": [1.25, 2]}
+    with cg.place_button("Place Trade · 🔴 LIVE", key=PLACE_KEY,
+                         confirm_key=CONFIRM):
+        pass
+    assert fake.session_state[CONFIRM] == {"values": [1.25, 2]}

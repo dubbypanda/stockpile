@@ -29,6 +29,7 @@ except Exception:  # pragma: no cover - shields against Streamlit layout drift
 from options_scanner import (
     confirm_gate, positions_cache, settings_ui, trade_actions, trades_store,
 )
+from options_scanner.display.leaderboard import fingerprint_ids
 from options_scanner.format import (
     days_since, dte_cell, kv_table_html, leg_rows, money_md,
     open_prices_cell,
@@ -894,42 +895,56 @@ def _render_option_close(pos: dict, scfg: dict, market_open,
                     f"**${_val:,.0f}**) · 🔴 **LIVE**").replace("$", "\\$"))
 
         _cc1, _cc2, _ = st.columns([1, 1, 3])
-        with _cc1:
-            _do = st.button("Place Close · 🔴 LIVE",
-                            key=f"opt_close_do_{posid}", type="primary",
-                            width="stretch")
         with _cc2:
             _cbox = st.container(key=f"opt_close_cxlbox_{posid}")
             _cbox.button("Cancel", key=f"opt_close_cxl_{posid}",
                          width="stretch",
                          on_click=confirm_gate.disarm(_confirm_key))
-        if _do:
-            _result = (_submit_close(scfg, tracked, limit, True, close_n)
-                       if tracked else
-                       _submit_position_close(scfg, pos, limit, close_n))
-            st.session_state[_result_key] = _result
-            st.session_state[_confirm_key] = False
-            if _result.get("ok"):
-                # Confirm via the center banner (like the Sell Put / Roll
-                # dialogs) rather than the inline st.success below: this panel
-                # renders only while a position row is selected, and a close
-                # drops that position out of the refetched list — so the inline
-                # message had nowhere to render and the confirmation was never
-                # seen. Drop the stored result so it can't double-render.
-                st.session_state["_osc_toast"] = _result["msg"]
-                st.session_state.pop(_result_key, None)
-                _option_positions.clear()
-                _close_quote.clear()
-                _order_status.clear()
-            # Rerun either way: disarming above only lands on the NEXT run, so
-            # without this the panel the click came from stays up with Place
-            # Close still live. On a failure the stored result re-renders as the
-            # inline error below, one Confirm away from a retry.
-            st.rerun()
+        with confirm_gate.place_button("Place Close · 🔴 LIVE",
+                                       key=f"opt_close_do_{posid}",
+                                       confirm_key=_confirm_key,
+                                       container=_cc1) as _do:
+            if _do:
+                with st.spinner(confirm_gate.SENDING_SPINNER):
+                    _result = (
+                        _submit_close(scfg, tracked, limit, True, close_n)
+                        if tracked else
+                        _submit_position_close(scfg, pos, limit, close_n))
+                st.session_state[_result_key] = _result
+                st.session_state[_confirm_key] = False
+                if _result.get("ok"):
+                    # Confirm via the center banner (like the Sell Put / Roll
+                    # dialogs) rather than the inline st.success below: this
+                    # panel renders only while a position row is selected, and a
+                    # close drops that position out of the refetched list — so
+                    # the inline message had nowhere to render and the
+                    # confirmation was never seen. Drop the stored result so it
+                    # can't double-render.
+                    st.session_state["_osc_toast"] = _result["msg"]
+                    st.session_state.pop(_result_key, None)
+                    _option_positions.clear()
+                    _close_quote.clear()
+                    _order_status.clear()
+                # Rerun either way: disarming above only lands on the NEXT run,
+                # so without this the panel the click came from stays up with
+                # Place Close still live. On a failure the stored result
+                # re-renders as the inline error below, one Confirm away from a
+                # retry.
+                st.rerun()
     # Failures stay inline, next to the button that produced them (a success
     # leaves via the banner above).
     if _result and not _result.get("ok"):
         st.error(_result["msg"].replace("$", "\\$"))
+
+
+def _leg_id(pos: dict) -> str:
+    """What makes a position row *that* leg — the identity a selection points
+    at, for `fingerprint_ids`. Deliberately no quantity: a partial close leaves
+    the same leg on the same row, and re-keying on it would drop the selection
+    mid-edit."""
+    return (f"{pos.get('underlying', '')}:{pos.get('strike', '')}:"
+            f"{pos.get('expiration', '')}:{pos.get('option_type', '')}:"
+            f"{pos.get('direction', '')}")
 
 
 def _split_by_right(positions: list, frame, is_call: bool):
@@ -1063,6 +1078,242 @@ def _display_status(store_status, broker_status, filled_known: bool) -> str:
     if store_status != "open" or filled_known or not broker_status:
         return _STATUS_WORDS.get(store_status, store_status)
     return str(broker_status).lower()
+
+
+def _fmt_exp(expiration: str) -> str:
+    """``2026-08-15`` → ``Aug 15 '26``; the raw string (or "?") when it won't
+    parse, since a record with a mangled date should still name itself."""
+    if not expiration:
+        return "?"
+    try:
+        return datetime.strptime(str(expiration),
+                                 "%Y-%m-%d").strftime("%b %d '%y")
+    except Exception:
+        return str(expiration)
+
+
+# Record states that still describe a contract you're on the hook for. A
+# settled record (closed / expired / assigned / canceled) is history, so its
+# expiration date passing means nothing.
+_LIVE_STATUSES = ("open", "closing", "rolling")
+
+# A flagged row's whole look, in one place: red stamp on a gray row.
+_EXPIRED_RED = "#dc2626"
+_EXPIRED_GRAY = "#e5e7eb"        # light theme — light gray against white
+_EXPIRED_GRAY_DARK = "#2f3542"   # dark theme — see _alert_row_css
+
+
+# An opening order that ended without filling. The **order** expiring at the
+# close is the everyday one: place a sell-to-open in the afternoon, it doesn't
+# fill, and at 16:00 ET the broker retires it — no position, no fill, nothing
+# said. The record goes on sitting in the list among real positions.
+#
+# These words reach the row from the BROKER (see _display_status), and only
+# while the store still calls the record "open" — which is what separates them
+# from a settled record whose own stored status happens to read "expired". The
+# value is the caps stamp that replaces the status word in the row header.
+_DEAD_ORDER_ALERTS = {
+    "expired": "⚠️ ORDER EXPIRED — NEVER FILLED",
+    "rejected": "⚠️ ORDER REJECTED — NEVER FILLED",
+    "canceled": "⚠️ ORDER CANCELED — NEVER FILLED",
+}
+
+
+def row_alert(store_status, disp_status, exp_age=None) -> str | None:
+    """The stamp for a row that is **not a live position** — or None.
+
+    Two ways a row stops being one, and both leave it looking exactly like a
+    position that simply has no quotes:
+
+    * the **opening order died** — expired at the close, rejected, or canceled
+      broker-side — so the position was never created at all;
+    * the **contract expired** under a position that did fill
+      (``past_expiry_days``).
+
+    The order case is gated on the store still saying "open", because that is
+    the only state in which ``_display_status`` hands back the broker's word.
+    A record the store itself calls "expired" or "canceled" is settled history
+    and must not be stamped: it already says what it is.
+
+    Dead order wins over an expired contract when somehow both apply — "you
+    never had this position" is the more important of the two.
+    """
+    if str(store_status or "open") == "open":
+        dead = _DEAD_ORDER_ALERTS.get(str(disp_status or "").lower())
+        if dead:
+            return dead
+    if exp_age is not None:
+        return f"⚠️ EXPIRED — {exp_age}D AGO"
+    return None
+
+
+def _alert_note(disp_status, exp_disp: str, exp_age=None) -> str:
+    """The paragraph an opened flagged row leads with — what happened, why the
+    row is full of blanks, and what to do about it.
+
+    Kept beside ``row_alert`` because they answer the same question at
+    different lengths; the row header gets four words, this gets the sentence
+    that stops you hunting for a position that was never there.
+    """
+    word = str(disp_status or "").lower()
+    if word in _DEAD_ORDER_ALERTS and exp_age is None:
+        verb = {"expired": "expired without filling",
+                "rejected": "was rejected",
+                "canceled": "was canceled"}[word]
+        return (
+            f"⚠️ **The opening order {verb}** — so this trade never became a "
+            "position. A day order that hasn't filled by 16:00 ET is retired "
+            "by the broker; the tracker keeps the record either way, which is "
+            "why it's still sitting in this list.  \n"
+            "There's nothing to close and no P/L to show. Confirm at your "
+            "broker, then clear it with **Remove from Tracker** below — that "
+            "deletes this app's copy only. To try the trade again, place it "
+            "fresh from the scanner.")
+    return (
+        (f"⚠️ **This contract expired {exp_age} day(s) ago** ({exp_disp}), and "
+         "the record is still tracked. Cost-to-close, P/L and order status "
+         "stay blank: an expired option is out of the chain, so there's "
+         "nothing left to quote.  \n"
+         "Finishing out of the money means it expired worthless and the "
+         "premium is yours; in the money means it was most likely assigned. "
+         "Check your broker for which, then clear the record with **Remove "
+         "from Tracker** — that deletes this app's copy only and never "
+         "touches a broker position.").replace("$", "\\$"))
+
+
+def _working_order_md(quote, limit) -> str:
+    """``bid \\$2.40 / ask \\$2.60 · limit \\$2.95`` for a working order's
+    collapsed row — the market against the price you asked for.
+
+    The one question a still-unfilled order raises is whether your limit is
+    anywhere near the market, and answering it used to mean opening the row.
+    The limit is the credit recorded at placement (that *is* the limit the
+    order went out with), so it shows even when the quote doesn't come back.
+    Empty string when there's no limit either.
+
+    Dollar signs are backslash-escaped: a *pair* of them anywhere in a markdown
+    string is read as LaTeX math, and this segment shares a label with the
+    strike and the spot.
+    """
+    bits = []
+    bid = (quote or {}).get("bid")
+    ask = (quote or {}).get("ask")
+    if bid is not None and ask is not None:
+        bits.append(f"bid \\${float(bid):,.2f} / ask \\${float(ask):,.2f}")
+    if limit is not None:
+        try:
+            bits.append(f"limit \\${float(limit):,.2f}")
+        except (TypeError, ValueError):
+            pass
+    return " · ".join(bits)
+
+
+def _stamp_md(stamp: str) -> str:
+    """A row alert's stamp as the markdown that goes in the header label — red,
+    bold, SHOUTING.
+
+    Markdown, not HTML: a ``st.button`` label renders markdown only (see
+    ``_day_head_md``). The caps are written into the stamp itself rather than
+    applied with ``text-transform``, so the shout survives even if the per-row
+    CSS stops matching, and the ``**`` does double duty — it bolds the text
+    *and* emits the ``<strong>`` that ``_alert_row_css`` hangs the forced red
+    on.
+    """
+    return f":red[**{stamp}**]"
+
+
+# Row tints, one entry per state a collapsed row can be in. Each is
+# (background, hover, border, left edge, dark background, dark hover):
+#
+# * **dead** — nothing behind this row (see row_alert). Gray, red edge.
+# * **working** — an order still out there that may yet fill. Light yellow:
+#   worth picking out of the list, but it isn't a problem, so it doesn't get
+#   the red.
+#
+# Solid colors, not translucent tints — the 10%-alpha wash this started as was
+# invisible in practice, and a row meant to catch you scrolling past can't be a
+# wash. "Light yellow" and "light gray" mean light *against the page*, so each
+# carries its own dark-theme pair: the header's label color is pinned to
+# --osc-ink-2 and flips with the theme, so one literal light value would be
+# near-white text on near-white.
+_ROW_TINTS = {
+    "dead":    (_EXPIRED_GRAY, "#d7dbe0", "#cbd5e1", _EXPIRED_RED,
+                _EXPIRED_GRAY_DARK, "#3a4150"),
+    "working": ("#fef3c7", "#fde9a8", "#fcd34d", "#f59e0b",
+                "#3b3524", "#474029"),
+}
+
+
+def _row_tint_css(tint_by_id) -> str:
+    """A ``<style>`` block coloring the header row of each tinted trade.
+
+    ``tint_by_id`` maps trade id → a key of ``_ROW_TINTS``. Empty string when
+    nothing is tinted, so the caller can skip the write.
+
+    Scoped per trade id (12 hex chars, so no id can be a prefix of another) and
+    written *after* the shared header block, whose transparent-background rule
+    it has to beat at equal specificity.
+
+    A **dead** row also gets its stamp forced red here, through the
+    ``<strong>`` that ``_stamp_md``'s ``**`` produces. That element exists only
+    in a stamped label, so it's a precise hook — and being a declaration on the
+    element itself, it can't be undone by the ``color: … !important`` pin on
+    the surrounding ``<p>`` the way an inherited color could.
+    """
+    out = []
+    for tid, tint in dict(tint_by_id).items():
+        bg, hov, brd, edge, bg_dark, hov_dark = _ROW_TINTS[tint]
+        out.append(
+            f"[class*='st-key-trade_hdr_{tid}'] button{{"
+            f"background:{bg} !important;"
+            f"border:1px solid {brd} !important;"
+            f"border-left:5px solid {edge} !important;}}"
+            f"[class*='st-key-trade_hdr_{tid}'] button:hover{{"
+            f"background:{hov} !important;}}"
+            f'html[data-osc-theme="dark"] '
+            f"[class*='st-key-trade_hdr_{tid}'] button{{"
+            f"background:{bg_dark} !important;}}"
+            f'html[data-osc-theme="dark"] '
+            f"[class*='st-key-trade_hdr_{tid}'] button:hover{{"
+            f"background:{hov_dark} !important;}}")
+        if tint == "dead":
+            # Red, heavy, and spaced a little so the caps read as a stamp
+            # rather than shouting mid-sentence. Both shapes are covered —
+            # Streamlit wraps a color directive in a span of its own.
+            out.append(
+                f"[class*='st-key-trade_hdr_{tid}'] button p strong,"
+                f"[class*='st-key-trade_hdr_{tid}'] button p span strong{{"
+                f"color:{_EXPIRED_RED} !important;font-weight:800 !important;"
+                f"letter-spacing:0.04em;}}")
+    return f"<style>{''.join(out)}</style>" if out else ""
+
+
+def past_expiry_days(trade: dict, today=None) -> int | None:
+    """Days since this trade's contract expired — None when it hasn't.
+
+    Nothing in the app moves a record off "open" when its expiration passes:
+    the store's lifecycle is driven by *orders* (placed, filled, closed), and an
+    option expiring is the one ending that sends no order. So the record sits
+    there reading "held" forever, its cost-to-close and P/L blank because the
+    contract has dropped out of the chain — an unsettled position and a
+    finished one look identical in the list.
+
+    Expiring **today** is not expired: the contract still trades until the
+    close, and the row is still actionable. Only a date strictly in the past
+    counts, which also keeps this stable across a timezone's worth of slop.
+
+    Returns the age in days (≥ 1) so callers can say *how long* it's been
+    sitting — the number that turns "something's off" into "settle this".
+    """
+    if str(trade.get("status", "open")) not in _LIVE_STATUSES:
+        return None
+    try:
+        exp = datetime.strptime(str(trade.get("expiration", "")),
+                                "%Y-%m-%d").date()
+    except Exception:
+        return None            # undated or malformed — nothing to claim
+    days = ((today or datetime.now().date()) - exp).days
+    return days if days > 0 else None
 
 
 def _intrinsic_value(spot, strike, option_type: str) -> float | None:
@@ -1655,13 +1906,22 @@ def _render_option_positions(scfg: dict, provider: str, market_open,
                    .apply(lambda s: [_sign_color(_sub.loc[i, "_pct"])
                                      for i in s.index], subset=["Spot/Day%"])
                    .map(_sign_color, subset=["P/L"]))
+        # Fingerprint the legs into the widget key, so the selection is dropped
+        # exactly when a row index would start meaning a different contract —
+        # closing a leg shortens this list under a selection that was made on
+        # the old one, and this panel is an order builder. Identity only (leg,
+        # not size): folding quantity in would clear the selection on every
+        # partial fill, and the size the panel offers is re-seeded anyway.
+        _key = f"{_key}_{fingerprint_ids(_leg_id(p) for p in _subset)}"
         event = st.dataframe(
             _styled, hide_index=True, width="stretch", on_select="rerun",
             selection_mode="single-row", key=_key,
             height=df_height(_styled), column_config=_col_cfg)
         sel = event.selection.rows if hasattr(event, "selection") else []
         _scroll_guard = f"_opt_pos_scroll_{_key}"
-        if not sel:
+        if not sel or sel[0] >= len(_subset):
+            # See the stock table: unreachable with the key above, kept because
+            # a stale index on an order screen must not be a traceback.
             st.session_state.pop(_scroll_guard, None)
             continue
         _fresh = st.session_state.get(_scroll_guard) != sel[0]
@@ -1769,6 +2029,12 @@ def _scanner_trades(provider: str, scfg: dict, market_open) -> None:
         )
         return
 
+    # Which live records are past their expiration date. The other half of the
+    # flagged set — orders that died at the broker — needs the status prefetch
+    # below, so the two are combined into `_alerts` after it.
+    _expired_age = {t["id"]: d for t in trades
+                    if (d := past_expiry_days(t)) is not None}
+
     # Title (with a small, muted trade count) + a compact 🔄 refresh on one
     # row. Refresh clears the cached status/quote/spot fetches so the rerun
     # re-pulls them — e.g. to catch a fill — instead of taking its own row.
@@ -1778,7 +2044,10 @@ def _scanner_trades(provider: str, scfg: dict, market_open) -> None:
               f"open</span>")
     _th, _tr = st.columns([8, 1], vertical_alignment="bottom")
     with _th:
-        section_header(title=f"Trades made from Scanner{_mode_badge}{_count}")
+        # Held open until the flagged count is known — the heading has to say
+        # "· 1 NEEDS ATTENTION", and that answer comes from the broker read
+        # further down. Filled in below; nothing else renders in between.
+        _hdr_slot = st.empty()
     with _tr:
         if st.button("🔄", key="trades_refresh",
                      help="Re-fetch order status, quotes, and spot."):
@@ -1933,15 +2202,26 @@ def _scanner_trades(provider: str, scfg: dict, market_open) -> None:
             # so a filled position never needs this read again: only genuinely
             # in-flight orders keep costing a round-trip. Expanded rows still
             # read it either way, since the broker line there shows fill details.
-            if (not tr.get("paper") and tr.get("order_id")
-                    and tr.get("status") == "open"
-                    and (not tr.get("filled_at") or _expanded)):
+            _open_order = (not tr.get("paper") and tr.get("order_id")
+                           and tr.get("status") == "open")
+            _unresolved = bool(_open_order and not tr.get("filled_at"))
+            if _unresolved or (_open_order and _expanded):
                 jobs.append(("status", tr.get("id"), tr))
             # Deferred load: a collapsed trade fetches nothing else. Its
             # remaining Schwab reads run only once the user opens its row (the
             # toggle header below sets this flag, then reruns so this loop picks
             # the trade up).
+            #
+            # ONE exception: an unresolved opening order also gets its option
+            # quoted while collapsed, so a working row's header can show the
+            # market against the limit you asked for (_working_order_md). That
+            # set is small and self-limiting — it's exactly the orders still in
+            # flight, and each one leaves it the moment it fills or dies. We
+            # can't wait to learn it's *working* first: that answer comes from
+            # the status read being queued in this same batch.
             if not _expanded:
+                if _unresolved:
+                    jobs.append(("quote", tr.get("id"), tr))
                 continue
             # A working closing order is polled via close_order_id instead.
             if (not tr.get("paper") and tr.get("close_order_id")
@@ -1995,12 +2275,64 @@ def _scanner_trades(provider: str, scfg: dict, market_open) -> None:
             # Don't block on stragglers — the client's HTTP timeout reaps them.
             ex.shutdown(wait=False, cancel_futures=True)
 
+    # ── Which rows aren't live positions ────────────────────────────────────
+    # Resolved here, between the prefetch and the render loop, because it takes
+    # the broker's word for each opening order — an order that expired at the
+    # close is only knowable from that read. Resolving the status word ONCE for
+    # every row (rather than per-row inside the loop) is what lets the heading
+    # count, the callout, the row styling and the row itself agree.
+    _disp_by_id = {
+        t["id"]: _display_status(
+            t.get("status", "open"),
+            (status_by_id.get(t.get("id")) or {}).get("status"),
+            (status_by_id.get(t.get("id")) or {}).get("status") == "FILLED"
+            or bool(t.get("filled_at")))
+        for t in trades}
+    _alerts = {}
+    for t in trades:
+        _al = row_alert(t.get("status", "open"), _disp_by_id[t["id"]],
+                        _expired_age.get(t["id"]))
+        if _al:
+            _alerts[t["id"]] = _al
+    # Orders still out there. `cancelable` is the broker's own "this can still
+    # be pulled", which is the app's existing test for a live order (it gates
+    # the Cancel buttons) — steadier than matching status words, since WORKING,
+    # QUEUED and PENDING_ACTIVATION all mean the same thing to a watcher.
+    _working_ids = {t["id"] for t in trades
+                    if t.get("status", "open") == "open"
+                    and (status_by_id.get(t["id"]) or {}).get("cancelable")}
+
+    # The heading, now that the flagged count is known (see _hdr_slot).
+    if _alerts:
+        # Red, not muted grey: the one number in the heading asking for
+        # something to be done, in the same red the rows are stamped with.
+        _count += (f" <span style='font-size:0.5em;color:{_EXPIRED_RED};"
+                   f"font-weight:700;vertical-align:middle;'>· "
+                   f"{len(_alerts)} "
+                   f"{'NEEDS' if len(_alerts) == 1 else 'NEED'} "
+                   f"ATTENTION</span>")
+    with _hdr_slot.container():
+        section_header(title=f"Trades made from Scanner{_mode_badge}{_count}")
+
+    # No banner above the list: the row itself carries the message. A summary
+    # warning was tried here and cut — the red stamp on a grayed row is the
+    # whole point, and a yellow box repeating it just pushed the list down.
+
+    # Row tints. Dead rows go gray with a red edge; a working order goes light
+    # yellow, because "still out there, may yet fill" is a state you want to
+    # pick out of the list at a glance too — just not an alarming one.
+    _tints = {tid: "dead" for tid in _alerts}
+    _tints.update({tid: "working" for tid in _working_ids})
+    if _tints:
+        st.markdown(_row_tint_css(_tints), unsafe_allow_html=True)
+
     for t in trades:
         exp = t.get("expiration", "")
-        try:
-            exp_disp = datetime.strptime(exp, "%Y-%m-%d").strftime("%b %d '%y")
-        except Exception:
-            exp_disp = exp or "?"
+        exp_disp = _fmt_exp(exp)
+        # The stamp when this row isn't a live position — a dead opening order
+        # or an expired contract — else None. Resolved above the loop; drives
+        # the header stamp, the row's gray, and the notice inside it.
+        _alert = _alerts.get(t.get("id"))
         qty = int(t.get("quantity", 1))
         credit_ps = float(t.get("credit", 0))          # per share
         total_credit = credit_ps * 100 * qty
@@ -2032,9 +2364,9 @@ def _scanner_trades(provider: str, scfg: dict, market_open) -> None:
                               datetime.now().isoformat(timespec="seconds")))
             trades_store.update(t["id"], filled_at=_fat_iso)
             t["filled_at"] = _fat_iso
-        _disp_status = _display_status(
-            _store_status, bs.get("status") if bs else None,
-            filled or bool(t.get("filled_at")))
+        # Resolved above the loop (_disp_by_id) so the row, the heading count,
+        # the callout and the styling all read the same word.
+        _disp_status = _disp_by_id[t["id"]]
         _otw = "CALL" if t.get("option_type") == "C" else "PUT"
         # Underlying spot + today's change, just before the mode badge — which
         # stays the last element on every line. Absent for a closed record (no
@@ -2042,6 +2374,15 @@ def _scanner_trades(provider: str, scfg: dict, market_open) -> None:
         # back, in which case the segment is simply dropped.
         _hmeta = spot_by_ticker.get(t.get("ticker")) or {}
         _spot_seg = _day_head_md(_hmeta.get("spot"), _hmeta.get("pct_change"))
+        # A flagged row's stamp takes over the status slot. "held" — or a
+        # murmured lowercase "expired" — is the one thing the row must not
+        # still be saying when there's no position behind it (see _stamp_md).
+        _status_seg = _disp_status if _alert is None else _stamp_md(_alert)
+        # A working order carries the market and its own limit right in the
+        # header — "is my price anywhere near?" without opening the row.
+        _order_seg = (_working_order_md(quote_by_id.get(t.get("id")),
+                                        t.get("credit"))
+                      if t["id"] in _working_ids else "")
         # The strike's "$" is escaped: two unescaped dollar signs in one markdown
         # string (strike + spot) get parsed as LaTeX math, which swallows them
         # and reflows the middle of the header into a serif math run.
@@ -2052,12 +2393,14 @@ def _scanner_trades(provider: str, scfg: dict, market_open) -> None:
             _rf = t.get("roll_from") or {}
             label = (f"{t.get('ticker', '?')} {_otw} "
                      f"\\${_rf.get('strike', '?')} → \\${t.get('strike', '?')} "
-                     f"— {exp_disp} · {qty}x · rolling"
+                     f"— {exp_disp} · {qty}x · "
+                     + (_status_seg if _alert is not None else "rolling")
                      + (f" · {_spot_seg}" if _spot_seg else "")
                      + ("  ·  📝 PAPER" if t.get("paper") else "  ·  🔴 LIVE"))
         else:
             label = (f"{t.get('ticker', '?')} \\${t.get('strike', '?')} {_otw} — "
-                     f"{exp_disp} · {qty}x · {_disp_status}"
+                     f"{exp_disp} · {qty}x · {_status_seg}"
+                     + (f" · {_order_seg}" if _order_seg else "")
                      + (f" · {_spot_seg}" if _spot_seg else "")
                      + ("  ·  📝 PAPER" if t.get("paper") else "  ·  🔴 LIVE"))
 
@@ -2098,6 +2441,12 @@ def _scanner_trades(provider: str, scfg: dict, market_open) -> None:
                     "This deleted the app's record only — any broker position is "
                     "untouched.")
                 st.rerun()
+        # The alert explains everything else in this row — the blank quote, the
+        # blank P/L, the cards with nothing in them — so it goes above all of
+        # it, before the roll branch below claims the row.
+        if is_open and _alert is not None:
+            st.warning(_alert_note(_disp_status, exp_disp,
+                                   _expired_age.get(t["id"])))
         # An in-flight roll is its own thing: two legs moving as one net order,
         # with no position to show P/L on until it fills. Render the shared
         # monitor (both legs' quotes, net now vs your limit, broker status) and
@@ -2736,33 +3085,35 @@ def _scanner_trades(provider: str, scfg: dict, market_open) -> None:
                     # Collapse via on_click (runs before the rerun body) so
                     # Cancel takes effect on the first click, like Sell Put.
                     bc1, bc2, _ = st.columns([1, 1, 3])
-                    with bc1:
-                        _do = st.button(f"Place Closing Trade · {_close_badge}",
-                                        key=f"close_do_{t['id']}",
-                                        type="primary", width="stretch")
                     with bc2:
                         _cbox = st.container(key=_cancel_box_key)
                         _cbox.button("Cancel", key=f"close_cancel_{t['id']}",
                                      width="stretch",
                                      on_click=confirm_gate.disarm(_confirm_key))
-                    if _do:
-                        _result = _submit_close(scfg, t, close_limit, close_live,
-                                                close_n)
-                        st.session_state[_result_key] = _result
-                        st.session_state[_confirm_key] = False
-                        if _result.get("ok"):
-                            # Confirm via the center banner, and DROP the stored
-                            # result so it can't also render inline below (one
-                            # placement, one message).
-                            st.session_state["_osc_toast"] = _result["msg"]
-                            st.session_state.pop(_result_key, None)
-                        # Rerun either way. Disarming above only takes effect on
-                        # the NEXT run, so without this the panel the click came
-                        # from stays on screen with Place Closing Trade still
-                        # live — the paper path used to skip the rerun and did
-                        # exactly that. A full rerun (not scope="fragment") is
-                        # required: run_app renders the banner.
-                        st.rerun()
+                    with confirm_gate.place_button(
+                            f"Place Closing Trade · {_close_badge}",
+                            key=f"close_do_{t['id']}",
+                            confirm_key=_confirm_key, container=bc1) as _do:
+                        if _do:
+                            with st.spinner(confirm_gate.SENDING_SPINNER):
+                                _result = _submit_close(scfg, t, close_limit,
+                                                        close_live, close_n)
+                            st.session_state[_result_key] = _result
+                            st.session_state[_confirm_key] = False
+                            if _result.get("ok"):
+                                # Confirm via the center banner, and DROP the
+                                # stored result so it can't also render inline
+                                # below (one placement, one message).
+                                st.session_state["_osc_toast"] = _result["msg"]
+                                st.session_state.pop(_result_key, None)
+                            # Rerun either way. Disarming above only takes
+                            # effect on the NEXT run, so without this the panel
+                            # the click came from stays on screen with Place
+                            # Closing Trade still live — the paper path used to
+                            # skip the rerun and did exactly that. A full rerun
+                            # (not scope="fragment") is required: run_app
+                            # renders the banner.
+                            st.rerun()
 
                 if _result:
                     (st.success if _result.get("ok") else st.error)(
