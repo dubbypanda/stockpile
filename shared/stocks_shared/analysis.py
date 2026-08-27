@@ -379,3 +379,120 @@ def compute_status(transactions, open_positions):
     if shares <= 0.001 and not open_positions:
         return "Closed", []
     return "Consistent", []
+
+
+# ── Money-weighted return (XIRR) ──────────────────────────────────────────────
+
+#: A position held only a few days annualizes to an absurd rate — a two-day
+#: put sale in schwab556 came out at 1045%. Arithmetically right, practically
+#: useless, so short-lived positions report nothing at all.
+MIN_XIRR_DAYS = 14
+
+
+def _flow_date(date_str):
+    """Trade date from a CSV date cell, ignoring any 'as of' processing date."""
+    s = str(date_str).split(" as of ")[-1].strip()
+    m = re.match(r"(\d{1,2})/(\d{1,2})/(\d{4})", s)
+    if not m:
+        return None
+    return date(int(m.group(3)), int(m.group(1)), int(m.group(2)))
+
+
+def build_cash_flows(transactions, terminal_value=None, terminal_date=None):
+    """Dated cash flows for one position, ready for :func:`xirr`.
+
+    Three sources, and the second is the one that matters:
+
+    1. Every transaction's net amount — buys negative, premium and sales
+       positive, exactly as the broker recorded them.
+
+    2. **Collateral for short puts.** Selling a cash-secured put deploys
+       capital that never appears as a cash flow, so the raw series is
+       financing-shaped: money in for months, one big outflow at
+       assignment. IRR on that has multiple roots and returns nonsense —
+       schwab556's GXO scored +3101% on a $1,596 loss. Emitting the
+       collateral (strike x 100 x contracts) as an outflow when the short
+       opens, reversed when it closes, makes it an investment again and
+       GXO becomes -40.9%. Rolls are handled by tracking total collateral
+       and emitting only the change.
+
+       Short *calls* get no such flow: the shares backing them are already
+       in the series as a purchase. A naked call would be understated, but
+       this portfolio does not hold them.
+
+    3. A terminal flow for an open position — what liquidating today would
+       net, which is the sheet's Close-out Value.
+    """
+    flows = []
+    collateral = 0.0
+    short_puts = defaultdict(float)
+
+    for row in sorted(transactions, key=lambda r: _flow_date(r[0]) or date.min):
+        d = _flow_date(row[0])
+        if d is None:
+            continue
+        action, opt_type, strike, qty, amount = row[1], row[2], row[4], row[6], row[9]
+
+        if amount not in ("", None):
+            try:
+                flows.append((d, float(amount)))
+            except (TypeError, ValueError):
+                pass
+
+        if opt_type == "Put" and qty not in ("", None) and strike not in ("", None):
+            try:
+                q, k = float(qty), (strike, row[5])
+            except (TypeError, ValueError):
+                continue
+            if action == "Sell to Open":
+                short_puts[k] += q
+            elif action in ("Buy to Close", "Expired", "Assigned"):
+                short_puts[k] = max(0.0, short_puts[k] - q)
+            else:
+                continue
+            try:
+                need = sum(c * float(s) * 100 for (s, _e), c in short_puts.items())
+            except (TypeError, ValueError):
+                continue
+            if abs(need - collateral) > 1e-9:
+                flows.append((d, -(need - collateral)))
+                collateral = need
+
+    if terminal_value is not None:
+        flows.append((terminal_date or date.today(), float(terminal_value)))
+    return flows
+
+
+def xirr(flows, min_days=MIN_XIRR_DAYS):
+    """Money-weighted annual return, or None when it is not meaningful.
+
+    Bisection rather than Newton: these series change sign several times,
+    and Newton wanders off or lands on whichever root it happens to find.
+    Bisection over a fixed bracket returns the root nearest normal returns
+    or nothing at all, which is the honest outcome for a series that has
+    no single rate of return.
+    """
+    if not flows or len(flows) < 2:
+        return None
+    if not (any(c < 0 for _, c in flows) and any(c > 0 for _, c in flows)):
+        return None                       # all one direction: no return to find
+    lo_d, hi_d = min(d for d, _ in flows), max(d for d, _ in flows)
+    if (hi_d - lo_d).days < min_days:
+        return None
+
+    def npv(rate):
+        return sum(cf / ((1.0 + rate) ** ((d - lo_d).days / 365.0))
+                   for d, cf in flows)
+
+    a, b = -0.9999, 50.0                  # -100% to +5000%
+    fa, fb = npv(a), npv(b)
+    if fa * fb > 0:
+        return None                       # no root in range
+    for _ in range(300):
+        m = (a + b) / 2.0
+        fm = npv(m)
+        if fa * fm <= 0:
+            b, fb = m, fm
+        else:
+            a, fa = m, fm
+    return (a + b) / 2.0

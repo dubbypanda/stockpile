@@ -36,6 +36,9 @@ input/*
 # Logs
 *.log
 
+# Positions console action log (what was merged/deleted/run, and when)
+positions/console_history.jsonl
+
 # IDE
 .idea/
 .vscode/

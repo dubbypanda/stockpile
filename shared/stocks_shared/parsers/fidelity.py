@@ -11,6 +11,12 @@ _OPT_SYM_RE = re.compile(r"^-([A-Z]+\d*)(\d{2})(\d{2})(\d{2})([CP])([\d.]+)$")
 _TICKER_RE = re.compile(r"^[A-Z]{1,6}(\.[A-Z]{1,2})?$")
 
 
+def _is_position(symbol):
+    """A tradeable position, as opposed to the cash sweep (SPAXX & co)."""
+    from stocks_shared.parsers import CASH_EQUIVALENTS
+    return bool(_TICKER_RE.match(symbol)) and symbol not in CASH_EQUIVALENTS
+
+
 def parse_dollar(s):
     if not s:
         return None
@@ -163,7 +169,7 @@ def parse_all_transactions(filepath):
             parsed = _parse_option_symbol(symbol)
             if parsed:
                 position_tickers.add(parsed[0])
-        elif action in ("Buy", "Sell") and _TICKER_RE.match(symbol):
+        elif action in ("Buy", "Sell") and _is_position(symbol):
             position_tickers.add(symbol)
 
     # Pass 2: assign each row to a ticker bucket or other_rows
@@ -184,7 +190,7 @@ def parse_all_transactions(filepath):
                 other_rows.append(row)
         elif action == "Dividend" and symbol in position_tickers:
             ticker_raw[symbol].append(row)
-        elif action in ("Buy", "Sell") and _TICKER_RE.match(symbol):
+        elif action in ("Buy", "Sell") and _is_position(symbol):
             ticker_raw[symbol].append(row)
         else:
             other_rows.append(row)

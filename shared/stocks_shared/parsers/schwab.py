@@ -114,11 +114,17 @@ def parse_all_transactions(filepath):
     - ticker_transactions: dict {ticker: [transaction rows]}
     - other_rows: list of raw CSV dicts that don't belong to any position
     """
+    from stocks_shared.parsers import CASH_EQUIVALENTS
+
     OPTION_ACTIONS = {"Sell to Open", "Buy to Open", "Buy to Close", "Sell to Close",
                       "Expired", "Assigned"}
     STOCK_ACTIONS = {"Buy", "Sell"}
     TRANSFER_IN_ACTION = "Internal Transfer"
     TICKER_RE = re.compile(r"^[A-Z]{1,6}(\.[A-Z]{1,2})?$")
+
+    def is_position(symbol):
+        """A tradeable position, as opposed to the cash sweep."""
+        return bool(TICKER_RE.match(symbol)) and symbol not in CASH_EQUIVALENTS
 
     raw_rows = []
     with open(filepath, newline="", encoding="utf-8-sig") as f:
@@ -138,9 +144,9 @@ def parse_all_transactions(filepath):
             m = re.match(r"([A-Z]+)\d*\s+\d{2}/\d{2}/\d{4}", symbol)
             if m:
                 position_tickers.add(m.group(1))
-        elif action in STOCK_ACTIONS and TICKER_RE.match(symbol):
+        elif action in STOCK_ACTIONS and is_position(symbol):
             position_tickers.add(symbol)
-        elif action == TRANSFER_IN_ACTION and TICKER_RE.match(symbol) and re.search(r"\d", qty_s):
+        elif action == TRANSFER_IN_ACTION and is_position(symbol) and re.search(r"\d", qty_s):
             position_tickers.add(symbol)
 
     ticker_raw = defaultdict(list)
@@ -157,9 +163,9 @@ def parse_all_transactions(filepath):
             m = re.match(r"([A-Z]+)\d*\s+\d{2}/\d{2}/\d{4}", symbol)
             if m:
                 assigned = m.group(1)
-        elif action in STOCK_ACTIONS and TICKER_RE.match(symbol):
+        elif action in STOCK_ACTIONS and is_position(symbol):
             assigned = symbol
-        elif action == TRANSFER_IN_ACTION and TICKER_RE.match(symbol):
+        elif action == TRANSFER_IN_ACTION and is_position(symbol):
             assigned = symbol
         elif symbol and symbol in position_tickers:
             assigned = symbol

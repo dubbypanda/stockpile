@@ -342,14 +342,14 @@ def _ensure_summary_tab(service, stab):
         # 12-column layout: A=Position, B=Stock Price, C=Mkt Val, D=Stock Gain,
         # E=All Call Results, F=All Put Results,
         # G=Dividends, H=Close-out Value, I=Avg Days Held,
-        # J=Amount Invested, K=Overall P/L, L=Ann Yield
+        # J=Gross Stock Purchases, K=Overall P/L, L=Ann Yield
         group_row = ["Underlying Stock", "", "", "", "Calls", "Puts",
                      "Overall", "", "", "", "", ""]
         write_range(service, stab, "A1:L1", [group_row])
         headers = ["Position", "Stock\nPrice", "Underlying\nMkt Val", "Underlying\nGain",
                    "All Call\nResults", "All Put\nResults",
                    "Dividends", "Close-out\nValue", "Total Days\nHeld",
-                   "Amount\nInvested", "Overall\nP/L", "Ann Yield"]
+                   "Gross Stock\nPurchases", "Overall\nP/L", "Ann Yield"]
         write_range(service, stab, "A2:L2", [headers])
         apply_fmt(service, sid, [
             {"mergeCells": {"range": {"sheetId": sid, "startRowIndex": 0, "endRowIndex": 1, "startColumnIndex": 0, "endColumnIndex": 4}, "mergeType": "MERGE_ALL"}},
@@ -516,8 +516,8 @@ def _write_summary_row(service, tab_name, status, issues,
     elif status == "Closed":
         # 12-column layout for Summary-Closed
         # E=All Call Results (B15=Covered Call Results), F=All Put Results (B{p+5}=Put Results)
-        # G=Dividends, H=Close-out Value, I=Avg Days Held,
-        # J=Amount Invested (H{i+4}), K=Overall P/L, L=Ann Yield (K/J*(365/I))
+        # G=Dividends, H=Close-out Value (H{i+4}), I=Avg Days Held,
+        # J=Gross Stock Purchases (H{i+1}), K=Overall P/L, L=Ann Yield (K/J*(365/I))
         new_row = [
             tab_name,
             f"='{tab_name}'!B5",                                          # B: Stock Price
@@ -526,9 +526,9 @@ def _write_summary_row(service, tab_name, status, issues,
             f"='{tab_name}'!B15" if show_calls else 0,                    # E: All Call Results
             f"='{tab_name}'!B{p+5}" if show_puts else 0,                  # F: All Put Results
             f"='{tab_name}'!B{i+1}",                                      # G: Dividends
-            f"='{tab_name}'!H{i+2}",                                      # H: Close-out Value
+            f"='{tab_name}'!H{i+4}",                                      # H: Close-out Value
             f"='{tab_name}'!H7",                                          # I: Avg Days Held
-            f"='{tab_name}'!H{i+1}",                                      # J: Amount Invested
+            f"='{tab_name}'!H{i+1}",                                      # J: Gross Stock Purchases
             f"=D{row_num}+E{row_num}+F{row_num}+G{row_num}",             # K: Overall P/L
             f"=IFERROR(K{row_num}/J{row_num}*(365/I{row_num}),0)",       # L: Ann Yield
         ]
@@ -551,7 +551,10 @@ def _write_summary_row(service, tab_name, status, issues,
             f"='{tab_name}'!B{p+3}+J{row_num}" if show_puts else 0,    # N: All Put Results
             f"='{tab_name}'!B{i+1}",                                     # O: Dividends
             f"='{tab_name}'!B4",                                         # P: Adj Cost Basis
-            f"='{tab_name}'!H{i+1}",                                     # Q: Close-out Value
+            # H{i+4}, not H{i+1}: this column has been reading Gross Stock
+            # Purchases under a Close-out Value header, and the Close-out
+            # Value pie chart is built from it.
+            f"='{tab_name}'!H{i+4}",                                     # Q: Close-out Value
             f"=D{row_num}+I{row_num}+N{row_num}+O{row_num}",           # R: Overall P/L
         ]
         write_range(service, stab, f"A{row_num}:R{row_num}", [new_row])

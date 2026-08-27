@@ -23,6 +23,17 @@ class AccountConfig:
     brokerage: str
     sheet_id: str
     csv: str | None
+    #: Human label, from the optional `name` key in config.toml. Several
+    #: accounts share a brokerage, so brokerage alone cannot tell them
+    #: apart in a picker; falls back to the CSV's basename.
+    name: str = ""
+
+    def __post_init__(self):
+        # Fall back to the CSV's basename: already unique across the
+        # configured accounts, ASCII (these get typed as --accounts
+        # arguments and printed to a cp1252 console), and short.
+        if not self.name:
+            self.name = Path(self.csv).stem if self.csv else self.sheet_id[:8]
 
 
 def get_all_accounts(brokerage_filter: str | None = None) -> list[AccountConfig]:
@@ -37,7 +48,8 @@ def get_all_accounts(brokerage_filter: str | None = None) -> list[AccountConfig]
             continue
         if brokerage_filter and brokerage != brokerage_filter.lower():
             continue
-        results.append(AccountConfig(brokerage=brokerage, sheet_id=sheet_id, csv=csv))
+        results.append(AccountConfig(brokerage=brokerage, sheet_id=sheet_id,
+                                     csv=csv, name=entry.get("name", "").strip()))
     return results
 
 

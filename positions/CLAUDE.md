@@ -16,12 +16,52 @@ Always run from the **repo root** using `uv run`:
 uv run positions/run_tracker.py                       # all configured accounts
 uv run positions/run_tracker.py --brokerage schwab    # one brokerage only
 uv run positions/run_tracker.py --csv input/OTHER.csv # override the CSV path
+uv run positions/run_tracker.py --list-accounts       # show account names
+uv run positions/run_tracker.py --accounts fidelity_522 schwab556
 ```
 
 Reads `positions/config.toml` (per-account Google Sheet IDs + CSV
 paths). Supported brokerages: **Schwab, Robinhood, Fidelity, Merrill
 Edge** — set `brokerage` in config to match the export. CSV parsers
-come from the `stocks-shared` package (`shared/stocks_shared/parsers/`).
+come from the `stocks-shared` package (`shared/stocks_shared/parsers/`),
+dispatched by `parsers.get_parser(brokerage)`.
+
+`--accounts` selects by the optional `name` key in config.toml, which
+defaults to the CSV's basename. Everything named runs in one process so
+the Yahoo cache stays shared.
+
+## The console
+
+```bash
+uv run streamlit run positions/run_console.py     # http://localhost:8502
+```
+
+`run_console.py` → `src/console_app.py`. Three panels: **Run Sheets**
+(tick accounts, run, watch the output stream), **Merge Transactions**
+(fold a new brokerage export into the CSV an account points at, with a
+preview; each candidate row also carries its own archive and delete
+buttons), and **History** (`src/history.py`).
+
+History has two sources, deliberately. The console appends its own
+actions — merges, archives, deletions, runs — to
+`positions/console_history.jsonl` as JSON Lines; `history.record()`
+swallows its own errors, because a failed log entry must never undo the
+action it was describing. Runs started from the CLI never reach that
+file, so `history.tracker_runs()` parses `positions/tracker.log` as
+well. Both are gitignored.
+
+The console never imports the tracker — a run shells out to
+`run_tracker.py` so `sheets.configure()`'s module-global state lives and
+dies in its own process. It reads `config.toml` and never writes it.
+
+Merging lives in `shared/stocks_shared/csv_merge.py`, not here, because
+it needs the same per-brokerage column knowledge the parsers have. Its
+`_SPECS` table names each brokerage's date column, identity columns, and
+volatile columns; when you change a parser's column handling, check that
+table. Correctness is enforced by re-parsing the merged output and
+requiring the transaction set to equal the union of both inputs — which
+is why the writer does not have to reproduce Merrill's space padding or
+Robinhood's embedded newlines byte-for-byte.
 
 ## Credentials & auth
 

@@ -125,12 +125,14 @@ from pathlib import Path
 import config
 import sheets
 from stocks_shared.analysis import (
+    build_cash_flows,
     compute_avg_held_anchor,
     compute_closed_avg_days,
     compute_status,
     detect_open_positions,
     detect_suspicious_positions,
     get_last_option,
+    xirr,
 )
 from layout import (TXN_ROW, build_open_sections, build_closed_sections,
                     build_txn_only_sections, _offsets)
@@ -233,19 +235,20 @@ def build_fmt_requests(sheet_id, status: str, p: int, i: int, txn_row: int,
         # Income / P&L / Returns (dynamic rows)
         sheets.currency(sheet_id, i0 + 1, 1, i0 + 2, 2),        # Total Dividends
         sheets.plain_number(sheet_id, i0 + 2, 1, i0 + 3, 2),    # Dividend Count
-        sheets.currency(sheet_id, i0 + 3, 1, i0 + 5, 2),        # Net premiums
+        sheets.currency(sheet_id, i0 + 3, 1, i0 + 6, 2),        # Net premiums + Total Income
         sheets.currency(sheet_id, i0 + 1, 4, i0 + 6, 5),        # P&L data
-        sheets.currency(sheet_id, i0 + 1, 7, i0 + 4, 8),        # Amount Invested / Close-out / Total Income
-        sheets.percent(sheet_id, i0 + 4, 7, i0 + 6, 8),         # Ann Yields
+        # Gross Purchases / Gross Sells / Net Cash Invested / Close-out
+        sheets.currency(sheet_id, i0 + 1, 7, i0 + 5, 8),
+        sheets.percent(sheet_id, i0 + 5, 7, i0 + 7, 8),         # Ann Yields
         sheets.currency(sheet_id, txn_row - 1, 7, 1000, 10),
         sheets.green_if_positive(sheet_id, 3, 7, 5, 8),
         sheets.green_if_positive(sheet_id, 7, 7, 8, 8),
         sheets.green_if_positive(sheet_id, 5, 4, 6, 5),
         sheets.green_if_positive(sheet_id, i0 + 1, 4, i0 + 6, 5),  # P&L breakdown
         sheets.green_if_positive(sheet_id, i0 + 1, 1, i0 + 2, 2),  # Dividends
-        sheets.green_if_positive(sheet_id, i0 + 3, 1, i0 + 5, 2),  # Net premiums
-        sheets.green_if_positive(sheet_id, i0 + 1, 7, i0 + 4, 8),  # Currency returns
-        sheets.green_if_positive(sheet_id, i0 + 4, 7, i0 + 6, 8),  # Ann Yields
+        sheets.green_if_positive(sheet_id, i0 + 3, 1, i0 + 6, 2),  # Net premiums + Total Income
+        sheets.green_if_positive(sheet_id, i0 + 1, 7, i0 + 5, 8),  # Currency returns
+        sheets.green_if_positive(sheet_id, i0 + 5, 7, i0 + 7, 8),  # Ann Yields
     ]
 
     if show_calls:
@@ -317,13 +320,33 @@ def build_fmt_requests(sheet_id, status: str, p: int, i: int, txn_row: int,
 
 # ── Ticker processing ─────────────────────────────────────────────────────────
 
+def _held_shares(transactions):
+    """Shares still held — the three ways they arrive and the one way they go."""
+    n = 0.0
+    for row in transactions:
+        if row[2] != "Stock" or row[6] in ("", None):
+            continue
+        try:
+            q = float(row[6])
+        except (TypeError, ValueError):
+            continue
+        if row[1] in ("Buy", "Reinvest Shares"):
+            n += q
+        elif row[1] == "Sell":
+            n -= q
+    return n
+
+
 def _txn_display(row):
     """Return the row with qty negated for sell-side actions."""
     row = list(row)
     action = str(row[1]).strip() if len(row) > 1 else ""
     if action.startswith("Sell") and row[6] not in ("", None):
         try:
-            row[6] = -abs(int(row[6]))
+            # float, not int: money-market and DRIP positions hold
+            # fractional shares, and int() silently truncated them — a
+            # 42.22-share sell was written to the sheet as 42.
+            row[6] = -abs(float(row[6]))
         except (ValueError, TypeError):
             pass
     return row
@@ -485,15 +508,33 @@ def process_ticker(ticker, transactions, brokerage, service,
             if last_put:
                 _fetch_opt_prices(last_put, last_put["strike"], is_call=False)
 
+    # Money-weighted return. An open position needs a terminal flow — what
+    # liquidating today would net — which is exactly the sheet's Close-out
+    # Value (=E7+B7+B8): shares at market, minus the cost to buy back the
+    # short options, whose market values are already negative. A closed
+    # position needs none: its closing trades are in the series already.
+    terminal = None
+    if status != "Closed" and current_price is not None:
+        shares = _held_shares(transactions)
+        if shares:
+            terminal = (shares * current_price
+                        + (current_call_value or 0.0)
+                        + (current_put_value or 0.0))
+    xirr_value = xirr(build_cash_flows(transactions, terminal_value=terminal))
+    if xirr_value is not None:
+        print(f"  Money-weighted return (XIRR): {xirr_value * 100:.1f}%")
+
     if status == "Closed":
         sections = build_closed_sections(tab_name, open_positions, last_row,
                                          brokerage, closed_avg_days,
                                          show_calls=show_calls, show_puts=show_puts,
-                                         last_call=last_call, last_put=last_put)
+                                         last_call=last_call, last_put=last_put,
+                                         xirr_value=xirr_value)
     else:
         sections = build_open_sections(tab_name, open_positions, last_row,
                                        avg_held_anchor, brokerage,
-                                       show_calls=show_calls, show_puts=show_puts)
+                                       show_calls=show_calls, show_puts=show_puts,
+                                       xirr_value=xirr_value)
     sheets.batch_write(service, tab_name, sections)
 
     sheets.write_range(service, tab_name, "B5",
@@ -552,12 +593,27 @@ def process_ticker(ticker, transactions, brokerage, service,
         "scaled by days remaining on the contract."
     )
     ic_yield_text = (
-        "Ann Yield on Invested Capital: Total P&L divided by total capital invested in the position "
-        "(stock purchases net of sales), annualized by Avg Days Held."
+        "Ann Yield (XIRR): the money-weighted annual return — the rate that makes every "
+        "dated cash flow in this position discount back to zero. Unlike a simple ratio it "
+        "knows WHEN each dollar was deployed, and it compounds. Short puts contribute their "
+        "collateral (strike * 100 * contracts) as capital deployed while the put is open, "
+        "since cash-secured premium is earned on money that is genuinely tied up. An open "
+        "position adds one final flow: Close-out Value, what liquidating today would net. "
+        "Blank means no meaningful rate — a position held under 14 days annualizes to "
+        "absurdity, and some premium-first series have no single rate of return."
     )
     cov_yield_text = (
-        "Ann Yield on Close-out Value: Total P&L divided by the current close-out value "
-        "(stock market value + open options market value), annualized by Avg Days Held."
+        "Ann Yield (simple): the previous formula, kept for comparison — Total P&L divided "
+        "by Amount Invested (gross lifetime stock purchases), scaled linearly by 365/days. "
+        "It is not a rate of return: it ignores when capital was deployed, does not compound, "
+        "and can print impossible values (a closed position that lost 19% over 57 days reads "
+        "-124%). Where the two disagree, trust XIRR."
+    )
+    cov_yield_closed_text = (
+        "Ann Yield (simple): see the note above — kept for comparison only. On a closed "
+        "position the XIRR figure is the realized money-weighted return over the position's "
+        "whole life, with no terminal flow needed since the closing trades are already in "
+        "the cash-flow series."
     )
 
     # Aliases used in formatting below (same values as _p/_i/_txn_row computed above)
@@ -572,8 +628,12 @@ def process_ticker(ticker, transactions, brokerage, service,
         sheets.write_range(service, tab_name, "K17", [[tv_call_text]])
     if show_puts and open_puts:
         sheets.write_range(service, tab_name, f"K{p+7}", [[tv_put_text]])
-    sheets.write_range(service, tab_name, f"K{i+4}", [[ic_yield_text]])
-    sheets.write_range(service, tab_name, f"K{i+5}", [[cov_yield_text]])
+    # i+5 / i+6 — the yield rows moved down two when RETURNS gained Gross
+    # Stock Sells and Net Cash Invested. These must track the row-offset
+    # constants in the formatting block below; they are the same two rows.
+    sheets.write_range(service, tab_name, f"K{i+5}", [[ic_yield_text]])
+    sheets.write_range(service, tab_name, f"K{i+6}", [[
+        cov_yield_closed_text if status == "Closed" else cov_yield_text]])
 
     def footnote_merge(row0):
         return {"mergeCells": {
@@ -624,17 +684,19 @@ def process_ticker(ticker, transactions, brokerage, service,
                footnote_overflow(tv_row),
            ]
            ] if show_puts and status != "Closed" else []),
-        footnote_merge(i0 + 4), footnote_merge(i0 + 5),
+        # The two yield rows moved down one when RETURNS gained Gross
+        # Stock Sells and Net Cash Invested: they are now i+5 and i+6.
+        footnote_merge(i0 + 5), footnote_merge(i0 + 6),
         sheets.light_bg(sheet_id, 3, 0, 4, 2),       # A4:B4 — Adj Cost Basis row
         sheets.light_bg(sheet_id, 3, 3, 4, 5),       # D4:E4 — Avg Cost / Share (paired)
         sheets.light_bg(sheet_id, 3, 10, 4, 11),     # K4 only — Adj Cost footnote anchor
         sheets.yellow_bg(sheet_id, 4, 10, 8, 11),    # K5:K8 — vertical yellow strip mirroring B5:B8
-        sheets.light_bg(sheet_id, i0 + 4, 6, i0 + 5, 8),
-        sheets.light_bg(sheet_id, i0 + 4, 10, i0 + 5, 11),  # K{i+5} only
         sheets.light_bg(sheet_id, i0 + 5, 6, i0 + 6, 8),
         sheets.light_bg(sheet_id, i0 + 5, 10, i0 + 6, 11),  # K{i+6} only
+        sheets.light_bg(sheet_id, i0 + 6, 6, i0 + 7, 8),
+        sheets.light_bg(sheet_id, i0 + 6, 10, i0 + 7, 11),  # K{i+7} only
         footnote_overflow(3), footnote_overflow(4),
-        footnote_overflow(i0 + 4), footnote_overflow(i0 + 5),
+        footnote_overflow(i0 + 5), footnote_overflow(i0 + 6),
     ]
     if issues:
         merge_fmt += [
@@ -659,21 +721,12 @@ def process_ticker(ticker, transactions, brokerage, service,
 # ── Main ──────────────────────────────────────────────────────────────────────
 
 def _load_parser(brokerage: str):
-    b = brokerage.lower()
-    if b == "schwab":
-        from stocks_shared.parsers.schwab import parse_all_transactions
-        return parse_all_transactions
-    if b == "robinhood":
-        from stocks_shared.parsers.robinhood import parse_all_transactions
-        return parse_all_transactions
-    if b == "fidelity":
-        from stocks_shared.parsers.fidelity import parse_all_transactions
-        return parse_all_transactions
-    if b == "merrill":
-        from stocks_shared.parsers.merrill import parse_all_transactions
-        return parse_all_transactions
-    print(f"Error: Unknown brokerage '{brokerage}'. Supported: schwab, robinhood, fidelity, merrill")
-    sys.exit(1)
+    from stocks_shared.parsers import get_parser
+    try:
+        return get_parser(brokerage)
+    except ValueError as e:
+        print(f"Error: {e}")
+        sys.exit(1)
 
 
 def _run_account(acct, csv_path: str, service):
@@ -730,7 +783,18 @@ def main():
     )
     parser.add_argument("--brokerage", metavar="NAME", help="Only run accounts for this brokerage (e.g. schwab).")
     parser.add_argument("--csv", dest="csv_override", metavar="FILE", help="Override the CSV file path from config.")
+    parser.add_argument("--accounts", metavar="NAME", nargs="+",
+                        help="Only run these accounts, by their config.toml "
+                             "`name` (repeatable). Runs them in ONE process so "
+                             "the Yahoo price cache is shared, as a full run is.")
+    parser.add_argument("--list-accounts", action="store_true",
+                        help="Print the configured account names and exit.")
     args = parser.parse_args()
+
+    if args.list_accounts:
+        for a in config.get_all_accounts():
+            print(f"{a.name}\t{a.brokerage}\t{a.csv or '(no csv)'}")
+        return
 
     _log("=== Run started ===")
     try:
@@ -739,6 +803,15 @@ def main():
             desc = f"for brokerage '{args.brokerage}'" if args.brokerage else "in config.toml"
             _log(f"ERROR: No configured accounts found {desc}.")
             sys.exit(1)
+
+        if args.accounts:
+            wanted = {n.strip().lower() for n in args.accounts}
+            accounts = [a for a in accounts if a.name.lower() in wanted]
+            missing = wanted - {a.name.lower() for a in accounts}
+            if missing:
+                _log(f"ERROR: No account named {', '.join(sorted(missing))}. "
+                     f"Use --list-accounts to see the configured names.")
+                sys.exit(1)
 
         sheets.configure(accounts[0].sheet_id, config.CREDS_PATH, config.TOKEN_PATH)
         _log("Connecting to Google Sheets...")

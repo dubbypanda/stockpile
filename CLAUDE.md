@@ -13,11 +13,69 @@ or `python3` directly.
 uv run positions/run_tracker.py
 uv run positions/run_tracker.py --brokerage schwab
 uv run positions/run_tracker.py --csv input/OTHER.csv
+uv run positions/run_tracker.py --list-accounts
+uv run positions/run_tracker.py --accounts fidelity_522 schwab556
 ```
 
 Reads `positions/config.toml` (account sheet IDs + CSV paths).
 Credentials at `~/.config/google-sheets-oauth.json`. First run opens
 a browser for OAuth; subsequent runs are silent.
+
+`--accounts` takes one or more account **names** — the optional `name`
+key in `config.toml`, defaulting to the CSV's basename. Everything
+named runs in *one* process, serially, so the Yahoo price cache is
+shared exactly as it is on a full run.
+
+### Positions console — merge + run UI
+
+```bash
+uv run streamlit run positions/run_console.py
+```
+
+Opens at `http://localhost:8502`, three panels over the same
+`config.toml` the CLI reads:
+
+- **Run Sheets** — tick accounts by name and run the tracker over them,
+  with its output streaming into the page. Shells out to
+  `run_tracker.py --accounts ...`; it does not import the tracker. This
+  is the default panel.
+- **Merge Transactions** — finds brokerage exports sitting in `input/`
+  that no account points at (top level only, so `input/one_off/` is
+  ignored), routes each to its account by format + ticker overlap, and
+  previews the merge before writing: rows added, rows *replaced*, rows
+  unchanged, rows only in the existing file, plus the transaction count
+  the parser will see. Confirming backs the target up to
+  `input/.backups/` and (by default) moves the consumed export to
+  `input/merged/`. Every candidate row carries its own **📦 archive**
+  (move to `input/merged/`, nothing lost — one click) and **🗑 delete**
+  (remove from disk). Delete arms a ✅/✖️ confirm *on that row*, since
+  several rows can look alike and the action is irreversible. Per-row
+  rather than acting on a selected file, so clearing out a handful of
+  stale exports takes a handful of clicks. Files that couldn't be routed
+  to any account get the same row actions — they can't be merged, but
+  they're usually the ones worth deleting.
+- **History** — every merge, archive, deletion and run the console has
+  performed, from `positions/console_history.jsonl` (gitignored,
+  append-only JSON Lines, downloadable). Below it, **every** tracker run
+  parsed out of `positions/tracker.log` — including runs started from
+  the CLI — with status, accounts and duration. A run showing
+  ⚠️ incomplete has no completion line in the log: it was interrupted,
+  or is still going.
+
+Deletions are recorded in History because after one, that entry is the
+only remaining evidence the file existed.
+
+The merge engine is `shared/stocks_shared/csv_merge.py` and is usable on
+its own. It matches rows on per-brokerage **identity columns** rather
+than byte equality, because a re-export can repeat a transaction with a
+changed volatile column — Fidelity writes `Cash Balance = Processing`
+until a trade settles — and on a match the incoming row wins. Rows found
+only in the existing file are always kept: several of these CSVs carry
+hand-backfilled history no export contains. Output dialect follows the
+source file, but byte-level fidelity is not the guarantee — instead
+every merge re-parses its own output with the brokerage's real parser
+and refuses to write unless the transactions are exactly the union of
+both inputs.
 
 ### Cost basis charts
 
@@ -129,8 +187,9 @@ port).
 ## Project structure
 
 - `shared/` — pip-installable `stocks-shared` package: CSV parsers,
-  Yahoo Finance helpers, FIFO analysis, Black-Scholes pricing
-- `positions/` — Google Sheets position tracker
+  Yahoo Finance helpers, FIFO analysis, Black-Scholes pricing, and the
+  `csv_merge` engine that folds a fresh export into an existing CSV
+- `positions/` — Google Sheets position tracker + the merge/run console
 - `cost-basis-charts/` — cost basis vs. price charts
 - `options-scanner/` — options scanner (web UI + CLI)
 - `trading-dashboard/` — Flask live candlestick dashboard

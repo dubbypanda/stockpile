@@ -7,11 +7,21 @@
 #   sheet_id  — the Google Sheets ID for that account's spreadsheet
 #   csv       — path to the exported transaction CSV
 #               (relative to repo root, or absolute)
+# and may also set:
+#   name      — a label for this account. Used by `--accounts NAME` and by
+#               the positions console's account picker. Defaults to the
+#               CSV's basename ("schwab_ira" for input/schwab_ira.csv),
+#               which is usually good enough — set it when you want
+#               something friendlier than a filename.
+#
+# See the configured names any time with:
+#   uv run positions/run_tracker.py --list-accounts
 
 [[accounts]]
 brokerage = "schwab"
 sheet_id  = "your-sheet-id-here"
 csv       = "input/schwab.csv"
+name      = "Schwab Brokerage"
 
 # [[accounts]]
 # brokerage = "robinhood"

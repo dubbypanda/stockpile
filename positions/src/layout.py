@@ -75,7 +75,11 @@ def _offsets(show_calls, show_puts, n_calls=1, n_puts=1):
     npts = max(n_puts, 1) if show_puts else 0
     p = 10 + 9 * nc if show_calls else 10
     i = p + 9 * npts if show_puts else p
-    return p, i, i + 9
+    # i+10, not i+9: RETURNS is the tallest of the three side-by-side
+    # blocks at row i and now runs to i+6 (it gained Gross Stock Sells and
+    # Net Cash Invested). The TRANSACTION LOG title sits at txn_row-2, so
+    # i+9 would have put it at i+7 — flush against RETURNS with no gap.
+    return p, i, i + 10
 
 
 def _stock_position_rows(T, L):
@@ -89,15 +93,29 @@ def _stock_position_rows(T, L):
         # remaining shares (buys+sells) per held share — the open-position
         # value, unchanged. When closed (E5=0, would divide by zero): fall
         # back to the plain average purchase price, buys only / shares bought.
+        # Reinvested shares are paid for out of the dividend, so their
+        # amount carries the same sign as a Buy and belongs in the cost
+        # numerator — otherwise adding them to Shares Held below would
+        # divide the same dollars over more shares and understate cost.
         ["Avg Cost / Share",
          f"=IFERROR(IF(E5<>0,"
          f"-(SUMPRODUCT((C${T}:C${L}=\"Stock\")*(B${T}:B${L}=\"Buy\")*J${T}:J${L})"
-         f"+SUMPRODUCT((C${T}:C${L}=\"Stock\")*(B${T}:B${L}=\"Sell\")*J${T}:J${L}))/E5,"
-         f"-SUMPRODUCT((C${T}:C${L}=\"Stock\")*(B${T}:B${L}=\"Buy\")*J${T}:J${L})"
-         f"/SUMPRODUCT((C${T}:C${L}=\"Stock\")*(B${T}:B${L}=\"Buy\")*G${T}:G${L})),0)"],
+         f"+SUMPRODUCT((C${T}:C${L}=\"Stock\")*(B${T}:B${L}=\"Sell\")*J${T}:J${L})"
+         f"+SUMPRODUCT((C${T}:C${L}=\"Stock\")*(B${T}:B${L}=\"Reinvest Shares\")*J${T}:J${L}))/E5,"
+         f"-(SUMPRODUCT((C${T}:C${L}=\"Stock\")*(B${T}:B${L}=\"Buy\")*J${T}:J${L})"
+         f"+SUMPRODUCT((C${T}:C${L}=\"Stock\")*(B${T}:B${L}=\"Reinvest Shares\")*J${T}:J${L}))"
+         f"/(SUMPRODUCT((C${T}:C${L}=\"Stock\")*(B${T}:B${L}=\"Buy\")*G${T}:G${L})"
+         f"+SUMPRODUCT((C${T}:C${L}=\"Stock\")*(B${T}:B${L}=\"Reinvest Shares\")*G${T}:G${L}))),0)"],
+        # Reinvest Shares is a third way shares arrive and has to be in the
+        # count: a DRIP position that never bought again still grows. Left
+        # out, SWVXX in 556 reported -139.06 shares against a true 520.00,
+        # and every figure derived from the count (avg cost, market value,
+        # close-out) inherited the error. Sells are already negative in the
+        # sheet — see _txn_display — so they add rather than subtract.
         ["Shares Held",
          f"=SUMPRODUCT((C${T}:C${L}=\"Stock\")*(B${T}:B${L}=\"Buy\")*G${T}:G${L})"
-         f"+SUMPRODUCT((C${T}:C${L}=\"Stock\")*(B${T}:B${L}=\"Sell\")*G${T}:G${L})"],
+         f"+SUMPRODUCT((C${T}:C${L}=\"Stock\")*(B${T}:B${L}=\"Sell\")*G${T}:G${L})"
+         f"+SUMPRODUCT((C${T}:C${L}=\"Stock\")*(B${T}:B${L}=\"Reinvest Shares\")*G${T}:G${L})"],
         ["Total Invested", "=E4*E5"],
         ["Market Value", "=E5*B5"],
         ["Position Opened",
@@ -129,12 +147,20 @@ def _stock_results_rows(T, L, avg_days_formula):
 
 
 def _income_rows(T, L, i, p, show_calls, show_puts):
+    # Total Income closes the section it belongs to. It used to sit in
+    # RETURNS, one row of income accounting stranded among capital
+    # measures; here it totals the three rows directly above it.
     return [
         ["INCOME", ""],
         ["Total Dividends", f"=SUMPRODUCT((C${T}:C${L}=\"Dividend\")*J${T}:J${L})"],
         ["Dividend Count", f"=COUNTIF(C${T}:C${L},\"Dividend\")"],
         ["Net Call Premium (all time)", "=B13" if show_calls else ""],
         ["Net Put Premium (all time)", f"=B{p+3}" if show_puts else ""],
+        ["Total Income", "=" + "+".join(
+            (["B13"] if show_calls else []) +
+            ([f"B{p+3}"] if show_puts else []) +
+            [f"B{i+1}"]
+        )],
     ]
 
 
@@ -295,7 +321,8 @@ def _empty_put_metrics_rows():
 # ── Public layout builders ─────────────────────────────────────────────────
 
 def build_open_sections(ticker, open_positions, last_row, avg_held_anchor=None,
-                        brokerage="", show_calls=True, show_puts=True):
+                        brokerage="", show_calls=True, show_puts=True,
+                        xirr_value=None):
     """Build position tab sections for an open (Consistent) position.
 
     Each open call (unique strike/expiration combo) gets its own
@@ -338,23 +365,38 @@ def build_open_sections(ticker, open_positions, last_row, avg_held_anchor=None,
         "D3:E8": _stock_position_rows(T, L),
         "G3:H8": _stock_results_rows(T, L, avg_days_formula),
 
-        f"A{i}:B{i+4}": _income_rows(T, L, i, p, show_calls, show_puts),
+        f"A{i}:B{i+5}": _income_rows(T, L, i, p, show_calls, show_puts),
         f"D{i}:E{i+5}": _pnl_rows(i, p, show_calls, show_puts),
 
-        f"G{i}:H{i+5}": [
+        f"G{i}:H{i+6}": [
             ["RETURNS", ""],
-            ["Amount Invested",
+            # Named for what it is rather than what it was taken to mean.
+            # Buy only: reinvested shares are bought with a dividend that
+            # is already counted as income, so folding them in here would
+            # count the same money twice and overstate cash committed.
+            ["Gross Stock Purchases",
              f"=-SUMPRODUCT((C${T}:C${L}=\"Stock\")*(B${T}:B${L}=\"Buy\")*J${T}:J${L})"],
+            ["Gross Stock Sells",
+             f"=SUMPRODUCT((C${T}:C${L}=\"Stock\")*(B${T}:B${L}=\"Sell\")*J${T}:J${L})"],
+            # Cash still committed, not the basis of what is held — those
+            # differ the moment part of a position is sold. Goes negative
+            # once more has been taken out than put in, which is worth
+            # seeing rather than flooring at zero.
+            ["Net Cash Invested", f"=H{i+1}-H{i+2}"],
             ["Close-out Value", "=E7+B7+B8"],
-            ["Total Income", "=" + "+".join(
-                (["B13"] if show_calls else []) +
-                ([f"B{p+3}"] if show_puts else []) +
-                [f"B{i+1}"]
-            )],
-            ["Ann Yield on Invested Capital",
-             f"=IFERROR(H{i+3}/H{i+1}*(365/H7),0)"],
-            ["Ann Yield on Close-out Value",
-             f"=IFERROR(H{i+3}/H{i+2}*(365/H7),0)"],
+            # XIRR is the real answer: a money-weighted rate that accounts
+            # for when each dollar was deployed and compounds properly.
+            # Computed in Python (see analysis.build_cash_flows) because it
+            # needs synthetic short-put collateral flows the sheet cannot
+            # see, plus a terminal flow equal to Close-out Value above.
+            # Blank means "no meaningful rate" — too short-lived, or a
+            # series with no single root — not zero.
+            ["Ann Yield (XIRR)", "" if xirr_value is None else xirr_value],
+            # Kept for comparison. P&L / gross lifetime purchases, scaled
+            # linearly by 365/days: not a rate of return, and it can print
+            # impossible values — schwab556's closed SQ reads -124.5%.
+            ["Ann Yield (simple)",
+             f"=IFERROR(E{i+5}/H{i+1}*(365/H7),0)"],
         ],
 
         f"A{txn_row-2}:K{txn_row-1}": [
@@ -394,7 +436,7 @@ def build_open_sections(ticker, open_positions, last_row, avg_held_anchor=None,
 def build_closed_sections(ticker, open_positions, last_row,
                            brokerage="", closed_avg_days=None,
                            show_calls=True, show_puts=True,
-                           last_call=None, last_put=None):
+                           last_call=None, last_put=None, xirr_value=None):
     """Build position tab sections for a closed position."""
     L = last_row
     p, i, txn_row = _offsets(show_calls, show_puts)
@@ -424,24 +466,29 @@ def build_closed_sections(ticker, open_positions, last_row,
         "D3:E8": _stock_position_rows(T, L),
         "G3:H8": _stock_results_rows(T, L, avg_days_formula),
 
-        f"A{i}:B{i+4}": _income_rows(T, L, i, p, show_calls, show_puts),
+        f"A{i}:B{i+5}": _income_rows(T, L, i, p, show_calls, show_puts),
         f"D{i}:E{i+5}": _pnl_rows(i, p, show_calls, show_puts),
 
-        f"G{i}:H{i+5}": [
+        f"G{i}:H{i+6}": [
             ["RETURNS", ""],
-            ["Amount Invested",
+            # See the matching note in build_open_sections: Buy only, so
+            # dividend-reinvested shares are not counted as cash committed.
+            ["Gross Stock Purchases",
              f"=-SUMPRODUCT((C${T}:C${L}=\"Stock\")*(B${T}:B${L}=\"Buy\")*J${T}:J${L})"],
+            ["Gross Stock Sells",
+             f"=SUMPRODUCT((C${T}:C${L}=\"Stock\")*(B${T}:B${L}=\"Sell\")*J${T}:J${L})"],
+            # On a closed position this lands at the position's net cash
+            # result on the stock leg alone — negative when the shares
+            # were sold for more than they cost.
+            ["Net Cash Invested", f"=H{i+1}-H{i+2}"],
             ["Close-out Value",
              f"=SUMPRODUCT((C${T}:C${L}=\"Stock\")*(B${T}:B${L}=\"Sell\")*J${T}:J${L})"],
-            ["Total Income", "=" + "+".join(
-                (["B13"] if show_calls else []) +
-                ([f"B{p+3}"] if show_puts else []) +
-                [f"B{i+1}"]
-            )],
-            ["Ann Yield on Invested Capital",
-             f"=IFERROR(H{i+3}/H{i+1}*(365/H7),0)"],
-            ["Ann Yield on Close-out Value",
-             f"=IFERROR(H{i+3}/H{i+2}*(365/H7),0)"],
+            # A closed position needs no terminal flow — the closing trades
+            # are already in the series — so XIRR here is the position's
+            # actual realized money-weighted return, start to finish.
+            ["Ann Yield (XIRR)", "" if xirr_value is None else xirr_value],
+            ["Ann Yield (simple)",
+             f"=IFERROR(E{i+5}/H{i+1}*(365/H7),0)"],
         ],
 
         f"A{txn_row-2}:K{txn_row-1}": [

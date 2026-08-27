@@ -1026,6 +1026,7 @@ dependencies = [
     { name = "google-auth" },
     { name = "google-auth-oauthlib" },
     { name = "stocks-shared" },
+    { name = "streamlit" },
 ]
 
 [package.dev-dependencies]
@@ -1039,6 +1040,7 @@ requires-dist = [
     { name = "google-auth" },
     { name = "google-auth-oauthlib" },
     { name = "stocks-shared", editable = "shared" },
+    { name = "streamlit" },
 ]
 
 [package.metadata.requires-dev]

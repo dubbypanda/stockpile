@@ -1,19 +1,25 @@
 #!/usr/bin/env python3
-"""Launch the options scanner (Streamlit) and the trading dashboard (Flask)
-together, so the dashboard appears in the scanner's "Live Charts" tab.
+"""Launch the options scanner (Streamlit), the trading dashboard (Flask), and
+the positions console (Streamlit) together, so the dashboard appears in the
+scanner's "Live Charts" tab.
 
     uv run run.py
 
 Starts the Flask dashboard on http://localhost:5000 (also reachable
 directly), waits for it to come up, then runs the Streamlit scanner on
-http://localhost:8501. Both apps' logs stream to this one terminal,
-prefixed `[scanner]` and `[dashboard]` so you can tell them apart. Ctrl+C
-stops both. If a dashboard is already running on :5000, it is reused (not
+http://localhost:8501 and the positions console on http://localhost:8502.
+All three apps' logs stream to this one terminal, prefixed `[scanner]`,
+`[dashboard]` and `[console]` so you can tell them apart. Ctrl+C stops
+them. If a dashboard is already running on :5000, it is reused (not
 restarted), and its logs stay in its own terminal.
 
-To run either app on its own instead:
+Only the scanner opens a browser tab; the console runs headless and prints
+its URL, so a run does not scatter tabs.
+
+To run any app on its own instead:
     uv run streamlit run options-scanner/run_app.py
     uv run trading-dashboard/app.py
+    uv run streamlit run positions/run_console.py
 """
 
 from __future__ import annotations
@@ -41,9 +47,22 @@ def _dashboard_port() -> int:
     return port if 1 <= port <= 65535 else 5000
 
 
+def _console_port() -> int:
+    """Positions-console port, overridable via OSC_CONSOLE_PORT (default
+    8502) so it can move off a taken port like the dashboard can."""
+    raw = os.environ.get("OSC_CONSOLE_PORT", "").strip()
+    try:
+        port = int(raw)
+    except ValueError:
+        return 8502
+    return port if 1 <= port <= 65535 else 8502
+
+
 DASHBOARD_PORT = _dashboard_port()
 DASHBOARD_URL = f"http://localhost:{DASHBOARD_PORT}"
 DASHBOARD_HEALTH = f"http://127.0.0.1:{DASHBOARD_PORT}/api/health"
+CONSOLE_PORT = _console_port()
+CONSOLE_URL = f"http://localhost:{CONSOLE_PORT}"
 
 _print_lock = threading.Lock()
 
@@ -141,6 +160,15 @@ def main() -> int:
             print("[run] Warning: dashboard did not become ready in time — "
                   "the Live Charts tab will show a start hint until it is.")
 
+    # Headless: only the scanner should claim a browser tab, so a run does
+    # not open three of them.
+    print(f"[run] Starting positions console (Streamlit) on {CONSOLE_URL} ...")
+    console = _start_logged(
+        [sys.executable, "-m", "streamlit", "run", "positions/run_console.py",
+         "--server.port", str(CONSOLE_PORT), "--server.headless", "true"],
+        "[console]",
+    )
+
     print("[run] Starting options scanner (Streamlit) on "
           "http://localhost:8501 ...")
     scanner = _start_logged(
@@ -152,10 +180,11 @@ def main() -> int:
     except KeyboardInterrupt:
         print("[run] Ctrl+C received — shutting down ...")
     finally:
-        # Tree-kill both children so no Streamlit grandchild or Flask
+        # Tree-kill every child so no Streamlit grandchild or Flask
         # process-group orphan survives to hold a port. `dashboard` is only
         # set when WE started it, so a reused dashboard is left untouched.
         _stop(scanner, "options scanner")
+        _stop(console, "positions console")
         if dashboard is not None:
             _stop(dashboard, "trading dashboard")
     return 0

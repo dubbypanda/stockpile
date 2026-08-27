@@ -108,7 +108,11 @@ class TestParseQty:
         assert _parse_qty("") == ""
 
     def test_float_qty(self):
-        assert _parse_qty("437.844241") == 437
+        # The fraction has to survive. Dividend reinvestment and money-market
+        # sweeps both hold fractional shares, and truncating them silently
+        # loses real holdings — the same defect _txn_display carried until it
+        # stopped rounding sell quantities with int().
+        assert _parse_qty("437.844241") == 437.844241
 
 
 # ── _build_opt_symbol ─────────────────────────────────────────────────────────
